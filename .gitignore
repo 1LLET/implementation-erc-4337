@@ -9,7 +9,7 @@ pnpm-debug.log*
 dist/
 build/
 out/
-lib/
+
 
 # === TypeScript ===
 *.tsbuildinfo

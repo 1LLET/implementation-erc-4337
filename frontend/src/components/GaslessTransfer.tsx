@@ -217,23 +217,77 @@ export default function GaslessTransfer() {
                 </p>
               </div>
 
-              {usdcBalance === 0n && (
-                <div className="bg-yellow-900/50 border border-yellow-600 rounded-lg p-4">
-                  <p className="text-yellow-400 text-sm">
-                    <strong>Send USDC to your Smart Account:</strong>
-                  </p>
-                  <p className="font-mono text-xs mt-2 break-all text-yellow-200">
-                    {smartAccount}
-                  </p>
-                  <p className="text-yellow-400/80 text-xs mt-2">
-                    USDC Contract: {truncateAddress(config.usdcAddress)}
-                  </p>
-                  <p className="text-yellow-400/80 text-xs mt-1">
-                    Send USDC to the Smart Account address above.
-                  </p>
-                </div>
-              )}
             </div>
+
+            {/* Deploy Account Action */}
+            {!isDeployed && (
+              <div className="bg-yellow-900/50 border border-yellow-600 rounded-lg p-4 mb-4">
+                <p className="text-yellow-400 font-semibold mb-2">
+                  Account Deployment Required
+                </p>
+                <p className="text-yellow-200 text-sm mb-3">
+                  You must deploy your smart account before you can send transactions.
+                </p>
+                <button
+                  onClick={async () => {
+                    if (status === "building" || status === "signing" || status === "sending" || status === "confirming") return;
+                    setError(null);
+                    setUserOpHash(null);
+                    setTxHash(null);
+
+                    try {
+                      setStatus("building");
+                      const userOp = await aa.buildDeployUserOperation();
+
+                      setStatus("signing");
+                      const signedUserOp = await aa.signUserOperation(userOp);
+
+                      setStatus("sending");
+                      const hash = await aa.sendUserOperation(signedUserOp);
+                      setUserOpHash(hash);
+
+                      setStatus("confirming");
+                      const receipt = await aa.waitForUserOperation(hash);
+                      setTxHash(receipt.receipt.transactionHash); // This line needs to be compatible with UserOpReceipt type
+
+                      if (receipt.success) {
+                        setStatus("success");
+                        setIsDeployed(true);
+                        refreshBalance();
+                      } else {
+                        throw new Error("Deployment failed on-chain");
+                      }
+                    } catch (err) {
+                      console.error("Deployment error:", err);
+                      setError(err instanceof Error ? err.message : "Deployment failed");
+                      setStatus("error");
+                    }
+                  }}
+                  disabled={status !== "connected" && status !== "success"} // Only active when connected and not busy
+                  className="w-full bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded transition-colors"
+                >
+                  Deploy Smart Account
+                </button>
+              </div>
+            )}
+
+            {/* USDC Info */}
+            {isDeployed && usdcBalance === 0n && (
+              <div className="bg-blue-900/50 border border-blue-600 rounded-lg p-4">
+                <p className="text-blue-400 text-sm">
+                  <strong>Send USDC to your Smart Account:</strong>
+                </p>
+                <p className="font-mono text-xs mt-2 break-all text-blue-200">
+                  {smartAccount}
+                </p>
+                <p className="text-blue-400/80 text-xs mt-2">
+                  USDC Contract: {truncateAddress(config.usdcAddress)}
+                </p>
+                <p className="text-blue-400/80 text-xs mt-1">
+                  Send USDC to the Smart Account address above.
+                </p>
+              </div>
+            )}
 
             {/* Transfer Form */}
             <div className="space-y-4">
@@ -271,6 +325,7 @@ export default function GaslessTransfer() {
                 onClick={sendTransfer}
                 disabled={
                   (status !== "connected" && status !== "success") ||
+                  !isDeployed ||
                   usdcBalance === 0n
                 }
                 className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-colors"
@@ -303,19 +358,6 @@ export default function GaslessTransfer() {
                 >
                   View on BaseScan
                 </a>
-              </div>
-            )}
-
-            {/* Error */}
-            {status === "error" && error && (
-              <div className="bg-red-900/50 border border-red-600 rounded-lg p-4">
-                <p className="text-red-400 text-sm">{error}</p>
-                <button
-                  onClick={() => setStatus("connected")}
-                  className="text-red-300 hover:underline text-sm mt-2"
-                >
-                  Try again
-                </button>
               </div>
             )}
           </div>
