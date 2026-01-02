@@ -4,6 +4,7 @@ import { parseUserOp, getUserOpHash, type UserOperation } from "../utils/userOpH
 import { validateUserOp } from "../services/validator.js";
 import { estimateUserOpGas, getNonce } from "../services/gasEstimator.js";
 import { executeUserOp, getUserOpReceipt, getUserOpByHash } from "../services/executor.js";
+import { requestApprovalSupport } from "../services/approvalService.js";
 
 export interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -194,6 +195,38 @@ async function handleChainId(): Promise<string> {
 }
 
 /**
+ * Handle pm_requestApprovalSupport
+ */
+async function handleRequestApprovalSupport(
+  params: unknown[]
+): Promise<unknown> {
+  if (params.length < 4) {
+    throw {
+      code: -32602,
+      message: "Invalid params: expected [token, owner, spender, amount]",
+    };
+  }
+
+  const token = params[0] as Address;
+  const owner = params[1] as Address;
+  const spender = params[2] as Address;
+  const amount = BigInt(params[3] as string); // Assume amount is passed as hex or string
+
+  console.log("\n[pm_requestApprovalSupport]");
+  console.log("Token:", token);
+  console.log("Owner:", owner);
+
+  const result = await requestApprovalSupport(token, owner, spender, amount);
+
+  // Serialize BigInts
+  return {
+    ...result,
+    gasCost: result.gasCost ? "0x" + result.gasCost.toString(16) : undefined,
+    fundingNeeded: result.fundingNeeded ? "0x" + result.fundingNeeded.toString(16) : undefined,
+  };
+}
+
+/**
  * Main RPC method dispatcher
  */
 export async function handleRpcMethod(
@@ -222,6 +255,9 @@ export async function handleRpcMethod(
         break;
       case "eth_chainId":
         result = await handleChainId();
+        break;
+      case "pm_requestApprovalSupport":
+        result = await handleRequestApprovalSupport(params);
         break;
       default:
         throw { code: -32601, message: `Method not found: ${method}` };

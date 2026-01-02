@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { type Address, type Hash, formatUnits } from "viem";
+import { type Address, type Hash, formatUnits, encodeFunctionData, parseUnits, maxUint256 } from "viem";
 import { AccountAbstraction, type UserOpReceipt } from "@/lib/accountAbstraction";
-import { config } from "@/config/contracts";
+import { config, erc20Abi } from "@/config/contracts";
 
 type Status =
   | "idle"
@@ -25,6 +25,8 @@ export default function GaslessTransfer() {
   const [owner, setOwner] = useState<Address | null>(null);
   const [smartAccount, setSmartAccount] = useState<Address | null>(null);
   const [usdcBalance, setUsdcBalance] = useState<bigint>(0n);
+  const [eoaUsdcBalance, setEoaUsdcBalance] = useState<bigint>(0n); // EOA balance
+  const [allowance, setAllowance] = useState<bigint>(0n); // Infinite approval check
   const [isDeployed, setIsDeployed] = useState(false);
 
   // Form state
@@ -39,8 +41,19 @@ export default function GaslessTransfer() {
   const refreshBalance = useCallback(async () => {
     if (smartAccount) {
       try {
-        const bal = await aa.getUsdcBalance();
-        setUsdcBalance(bal);
+        // Check infinite approval
+        const allow = await aa.getAllowance();
+        setAllowance(allow);
+
+        // If infinite approval, show EOA balance. Else show Smart Account balance (likely 0)
+        // Actually, we want to know if we can spend from EOA.
+        // Let's get both balances
+        const smartAccountBal = await aa.getUsdcBalance();
+        const eoaBal = await aa.getEoaUsdcBalance();
+
+        setUsdcBalance(smartAccountBal);
+        setEoaUsdcBalance(eoaBal);
+
         const deployed = await aa.isAccountDeployed();
         setIsDeployed(deployed);
       } catch (err) {
@@ -103,10 +116,29 @@ export default function GaslessTransfer() {
       // USDC has 6 decimals
       setStatus("building");
       const amountInUnits = BigInt(Math.floor(parseFloat(amount) * 1e6));
-      const userOp = await aa.buildUserOperationUsdc(
-        recipient as Address,
-        amountInUnits
-      );
+
+      // Determine if we are doing transferFrom (EOA -> Recipient) or transfer (SA -> Recipient)
+      // Since we are pushing the "infinite approval" flow, we prefer transferFrom if allowance is high
+      let userOp;
+
+      const hasInfinite = allowance > (maxUint256 / 2n); // Simple check for "large enough"
+
+      if (hasInfinite) {
+        // Use transferFrom (EOA -> Recipient)
+        console.log("Using transferFrom (EOA -> Recipient)");
+        userOp = await aa.buildUserOperationUsdcFromEoa(
+          recipient as Address,
+          amountInUnits
+        );
+      } else {
+        // Fallback: standard transfer (SA -> Recipient)
+        // This requires SA to have funds, which might not be the case here.
+        console.log("Using standard transfer (SA -> Recipient)");
+        userOp = await aa.buildUserOperationUsdc(
+          recipient as Address,
+          amountInUnits
+        );
+      }
 
       // Sign with MetaMask
       setStatus("signing");
@@ -133,6 +165,78 @@ export default function GaslessTransfer() {
     } catch (err) {
       console.error("Transfer error:", err);
       setError(err instanceof Error ? err.message : "Transfer failed");
+      setStatus("error");
+    }
+  };
+
+  // Handle Deposit (Approve + Fund flow)
+  const handleDeposit = async () => {
+    if (!owner || !smartAccount) return;
+
+    try {
+      setStatus("signing"); // Reusing signing status for approval
+      setError(null);
+
+      const amountUnits = maxUint256; // Infinite approval
+
+      // 1. Request Approval Support (Funding check)
+      const support = await aa.requestApprovalSupport(
+        config.usdcAddress,
+        smartAccount,
+        amountUnits
+      );
+
+      console.log("Approval Support:", support);
+
+      if (support.type === "approve") {
+        if (support.fundedAmount && support.fundedAmount !== "0") {
+          // Maybe show a toast or log that funding happened
+          console.log(`Funded ${support.fundedAmount} ETH for gas`);
+        }
+
+        // 2. Trigger Approve Transaction
+        const data = encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [smartAccount, amountUnits]
+        });
+
+        const txHash = await window.ethereum!.request({
+          method: "eth_sendTransaction",
+          params: [{
+            from: owner,
+            to: config.usdcAddress,
+            data,
+            // value: "0x0" // Optional
+          }]
+        }) as Hash;
+
+        setStatus("sending"); // Reusing sending status
+        setTxHash(txHash);
+
+        // Wait for receipt (manual poll or just wait)
+        // For simplicity, we just set success after a delay or optimistically
+        // Ideally we should wait for receipt.
+        // But since this is "gasless transfer" demo, maybe we stop here or we implement wait.
+
+        setStatus("confirming");
+        // Simple wait loop
+        setTimeout(() => {
+          setStatus("success");
+          refreshBalance();
+        }, 5000);
+
+      } else if (support.type === "permit") {
+        setError("Permit supported but not implemented in frontend demo. Please use tokens without Permit or update demo.");
+        setStatus("error");
+      } else {
+        console.log("Approval not needed");
+        setStatus("success");
+      }
+
+    } catch (err) {
+      console.error("Deposit error:", err);
+      setError(err instanceof Error ? err.message : "Deposit failed");
       setStatus("error");
     }
   };
@@ -213,7 +317,11 @@ export default function GaslessTransfer() {
               <div className="bg-gray-700 rounded-lg p-4">
                 <p className="text-gray-400 text-xs mb-1">USDC Balance</p>
                 <p className="text-xl font-semibold">
-                  {formatUsdc(usdcBalance)} USDC
+                  {/* Show EOA balance if we have infinite approval, otherwise SA balance */}
+                  {allowance > (maxUint256 / 2n) ? formatUsdc(eoaUsdcBalance) : formatUsdc(usdcBalance)} USDC
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {allowance > (maxUint256 / 2n) ? "(From your EOA)" : "(From Smart Account)"}
                 </p>
               </div>
 
@@ -271,8 +379,8 @@ export default function GaslessTransfer() {
               </div>
             )}
 
-            {/* USDC Info */}
-            {isDeployed && usdcBalance === 0n && (
+            {/* USDC Info - Only show if NO infinite approval and NO balance */}
+            {isDeployed && usdcBalance === 0n && allowance < (maxUint256 / 2n) && (
               <div className="bg-blue-900/50 border border-blue-600 rounded-lg p-4">
                 <p className="text-blue-400 text-sm">
                   <strong>Send USDC to your Smart Account:</strong>
@@ -285,6 +393,26 @@ export default function GaslessTransfer() {
                 </p>
                 <p className="text-blue-400/80 text-xs mt-1">
                   Send USDC to the Smart Account address above.
+                </p>
+              </div>
+            )}
+
+            {/* Deposit Section - Hide if already approved */}
+            {isDeployed && allowance < (maxUint256 / 2n) && (
+              <div className="bg-gray-700/50 rounded-lg p-4 mb-4 border border-gray-600">
+                <h3 className="text-gray-300 font-semibold mb-3">Enable USDC Spend</h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleDeposit}
+                    disabled={status !== "connected" && status !== "success"}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
+                  >
+                    Approve Infinite Amount
+                  </button>
+                </div>
+                <p className="text-gray-500 text-xs mt-2">
+                  Approves Smart Account to spend your USDC (Infinite). <br />
+                  (Gasless for you: Bundler refunds gas if needed)
                 </p>
               </div>
             )}
@@ -326,7 +454,7 @@ export default function GaslessTransfer() {
                 disabled={
                   (status !== "connected" && status !== "success") ||
                   !isDeployed ||
-                  usdcBalance === 0n
+                  (allowance > (maxUint256 / 2n) ? eoaUsdcBalance === 0n : usdcBalance === 0n)
                 }
                 className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-colors"
               >

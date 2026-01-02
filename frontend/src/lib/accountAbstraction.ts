@@ -186,6 +186,39 @@ export class AccountAbstraction {
     });
   }
 
+
+  /**
+   * Get the EOA's USDC balance
+   */
+  async getEoaUsdcBalance(): Promise<bigint> {
+    if (!this.owner) {
+      throw new Error("Not connected");
+    }
+
+    return await publicClient.readContract({
+      address: config.usdcAddress,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [this.owner],
+    });
+  }
+
+  /**
+   * Get the allowance of the Smart Account to spend the EOA's USDC
+   */
+  async getAllowance(): Promise<bigint> {
+    if (!this.owner || !this.smartAccountAddress) {
+      throw new Error("Not connected");
+    }
+
+    return await publicClient.readContract({
+      address: config.usdcAddress,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [this.owner, this.smartAccountAddress],
+    });
+  }
+
   /**
    * Get the nonce for the Smart Account
    */
@@ -336,6 +369,61 @@ export class AccountAbstraction {
     const isDeployed = await this.isAccountDeployed();
     const initCode = isDeployed ? "0x" : this.buildInitCode();
     const callData = this.buildUsdcTransferCallData(to, amount);
+    const nonce = await this.getNonce();
+
+    // Estimate gas
+    const gasEstimate = await this.estimateGas({
+      sender: this.smartAccountAddress,
+      nonce,
+      initCode: initCode as Hex,
+      callData,
+      paymasterAndData: config.paymasterAddress as Hex,
+    });
+
+    return {
+      sender: this.smartAccountAddress,
+      nonce,
+      initCode: initCode as Hex,
+      callData,
+      callGasLimit: BigInt(gasEstimate.callGasLimit),
+      verificationGasLimit: BigInt(gasEstimate.verificationGasLimit),
+      preVerificationGas: BigInt(gasEstimate.preVerificationGas),
+      maxFeePerGas: BigInt(gasEstimate.maxFeePerGas),
+      maxPriorityFeePerGas: BigInt(gasEstimate.maxPriorityFeePerGas),
+      paymasterAndData: config.paymasterAddress as Hex,
+      signature: "0x",
+    };
+  }
+
+  /**
+   * Build a complete UserOperation for USDC transfer using transferFrom (EOA -> Recipient)
+   */
+  async buildUserOperationUsdcFromEoa(
+    to: Address,
+    amount: bigint
+  ): Promise<UserOperation> {
+    if (!this.owner || !this.smartAccountAddress) {
+      throw new Error("Not connected");
+    }
+
+    const isDeployed = await this.isAccountDeployed();
+    const initCode = isDeployed ? "0x" : this.buildInitCode();
+
+    // ERC20 transferFrom call: transferFrom(owner, to, amount)
+    // The Smart Account calls this on the USDC contract.
+    const transferFromData = encodeFunctionData({
+      abi: erc20Abi,
+      functionName: "transferFrom",
+      args: [this.owner, to, amount],
+    });
+
+    // Wrap it in the smart account's execute function
+    const callData = encodeFunctionData({
+      abi: smartAccountAbi,
+      functionName: "execute",
+      args: [config.usdcAddress, 0n, transferFromData],
+    });
+
     const nonce = await this.getNonce();
 
     // Estimate gas
@@ -559,6 +647,42 @@ export class AccountAbstraction {
     const receipt = await this.waitForUserOperation(userOpHash);
 
     return { userOpHash, receipt };
+  }
+
+  /**
+   * Request support for token approval (fund if needed)
+   */
+  async requestApprovalSupport(
+    token: Address,
+    spender: Address,
+    amount: bigint
+  ): Promise<{
+    type: "permit" | "approve" | "none";
+    gasCost?: string;
+    fundingNeeded?: string;
+    fundedAmount?: string;
+  }> {
+    if (!this.owner) {
+      throw new Error("Not connected");
+    }
+
+    const response = await fetch(config.bundlerUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "pm_requestApprovalSupport",
+        params: [token, this.owner, spender, amount.toString()],
+      }),
+    });
+
+    const result = await response.json();
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+
+    return result.result;
   }
 
   // Getters
