@@ -7,8 +7,6 @@ import {
   type Address,
   type Hash,
   type Hex,
-  parseEther,
-  formatEther,
 } from "viem";
 import { baseSepolia } from "viem/chains";
 import {
@@ -157,18 +155,6 @@ export class AccountAbstraction {
     return code !== undefined && code !== "0x";
   }
 
-  /**
-   * Get the ETH balance of the Smart Account
-   */
-  async getSmartAccountBalance(): Promise<bigint> {
-    if (!this.smartAccountAddress) {
-      throw new Error("Not connected");
-    }
-
-    return await publicClient.getBalance({
-      address: this.smartAccountAddress,
-    });
-  }
 
   /**
    * Get the USDC balance of the Smart Account
@@ -252,35 +238,6 @@ export class AccountAbstraction {
     return `${config.factoryAddress}${createAccountData.slice(2)}` as Hex;
   }
 
-  /**
-   * Build callData for a simple ETH transfer
-   */
-  buildTransferCallData(to: Address, value: bigint): Hex {
-    return encodeFunctionData({
-      abi: smartAccountAbi,
-      functionName: "execute",
-      args: [to, value, "0x"],
-    });
-  }
-
-  /**
-   * Build callData for a USDC transfer
-   */
-  buildUsdcTransferCallData(to: Address, amount: bigint): Hex {
-    // Encode the ERC20 transfer call
-    const transferData = encodeFunctionData({
-      abi: erc20Abi,
-      functionName: "transfer",
-      args: [to, amount],
-    });
-
-    // Wrap it in the smart account's execute function
-    return encodeFunctionData({
-      abi: smartAccountAbi,
-      functionName: "execute",
-      args: [config.usdcAddress, 0n, transferData],
-    });
-  }
 
   /**
    * Estimate gas for a UserOperation
@@ -315,143 +272,6 @@ export class AccountAbstraction {
     return result.result;
   }
 
-  /**
-   * Build a complete UserOperation for ETH transfer
-   */
-  async buildUserOperation(
-    to: Address,
-    value: bigint
-  ): Promise<UserOperation> {
-    if (!this.owner || !this.smartAccountAddress) {
-      throw new Error("Not connected");
-    }
-
-    const isDeployed = await this.isAccountDeployed();
-    const initCode = isDeployed ? "0x" : this.buildInitCode();
-    const callData = this.buildTransferCallData(to, value);
-    const nonce = await this.getNonce();
-
-    // Estimate gas
-    const gasEstimate = await this.estimateGas({
-      sender: this.smartAccountAddress,
-      nonce,
-      initCode: initCode as Hex,
-      callData,
-      paymasterAndData: config.paymasterAddress as Hex,
-    });
-
-    return {
-      sender: this.smartAccountAddress,
-      nonce,
-      initCode: initCode as Hex,
-      callData,
-      callGasLimit: BigInt(gasEstimate.callGasLimit),
-      verificationGasLimit: BigInt(gasEstimate.verificationGasLimit),
-      preVerificationGas: BigInt(gasEstimate.preVerificationGas),
-      maxFeePerGas: BigInt(gasEstimate.maxFeePerGas),
-      maxPriorityFeePerGas: BigInt(gasEstimate.maxPriorityFeePerGas),
-      paymasterAndData: config.paymasterAddress as Hex,
-      signature: "0x",
-    };
-  }
-
-  /**
-   * Build a complete UserOperation for USDC transfer
-   */
-  async buildUserOperationUsdc(
-    to: Address,
-    amount: bigint
-  ): Promise<UserOperation> {
-    if (!this.owner || !this.smartAccountAddress) {
-      throw new Error("Not connected");
-    }
-
-    const isDeployed = await this.isAccountDeployed();
-    const initCode = isDeployed ? "0x" : this.buildInitCode();
-    const callData = this.buildUsdcTransferCallData(to, amount);
-    const nonce = await this.getNonce();
-
-    // Estimate gas
-    const gasEstimate = await this.estimateGas({
-      sender: this.smartAccountAddress,
-      nonce,
-      initCode: initCode as Hex,
-      callData,
-      paymasterAndData: config.paymasterAddress as Hex,
-    });
-
-    return {
-      sender: this.smartAccountAddress,
-      nonce,
-      initCode: initCode as Hex,
-      callData,
-      callGasLimit: BigInt(gasEstimate.callGasLimit),
-      verificationGasLimit: BigInt(gasEstimate.verificationGasLimit),
-      preVerificationGas: BigInt(gasEstimate.preVerificationGas),
-      maxFeePerGas: BigInt(gasEstimate.maxFeePerGas),
-      maxPriorityFeePerGas: BigInt(gasEstimate.maxPriorityFeePerGas),
-      paymasterAndData: config.paymasterAddress as Hex,
-      signature: "0x",
-    };
-  }
-
-  /**
-   * Build a complete UserOperation for USDC transfer using transferFrom (EOA -> Recipient)
-   */
-  /**
-   * Build a complete UserOperation for USDC transfer using transferFrom (EOA -> Recipient)
-   */
-  async buildUserOperationUsdcFromEoa(
-    to: Address,
-    amount: bigint
-  ): Promise<UserOperation> {
-    if (!this.owner || !this.smartAccountAddress) {
-      throw new Error("Not connected");
-    }
-
-    const isDeployed = await this.isAccountDeployed();
-    const initCode = isDeployed ? "0x" : this.buildInitCode();
-
-    // ERC20 transferFrom call: transferFrom(owner, to, amount)
-    // The Smart Account calls this on the USDC contract.
-    const transferFromData = encodeFunctionData({
-      abi: erc20Abi,
-      functionName: "transferFrom",
-      args: [this.owner, to, amount],
-    });
-
-    // Wrap it in the smart account's execute function
-    const callData = encodeFunctionData({
-      abi: smartAccountAbi,
-      functionName: "execute",
-      args: [config.usdcAddress, 0n, transferFromData],
-    });
-
-    const nonce = await this.getNonce();
-
-    // Estimate gas
-    const gasEstimate = await this.estimateGas({
-      sender: this.smartAccountAddress,
-      nonce,
-      initCode: initCode as Hex,
-      callData,
-      paymasterAndData: config.paymasterAddress as Hex,
-    });
-
-    return {
-      sender: this.smartAccountAddress,
-      nonce,
-      initCode: initCode as Hex,
-      callData,
-      callGasLimit: BigInt(gasEstimate.callGasLimit),
-      verificationGasLimit: BigInt(gasEstimate.verificationGasLimit),
-      preVerificationGas: BigInt(gasEstimate.preVerificationGas),
-      maxFeePerGas: BigInt(gasEstimate.maxFeePerGas),
-      maxPriorityFeePerGas: BigInt(gasEstimate.maxPriorityFeePerGas),
-      paymasterAndData: config.paymasterAddress as Hex,
-      signature: "0x",
-    };
-  }
 
   /**
    * Build a UserOperation for Batched Execution (e.g. USDC Transfer + Fee)
@@ -679,29 +499,6 @@ export class AccountAbstraction {
     throw new Error("Timeout waiting for UserOperation");
   }
 
-  /**
-   * High-level method to transfer ETH
-   */
-  async transferNative(
-    to: Address,
-    amountEther: string
-  ): Promise<{ userOpHash: Hash; receipt: UserOpReceipt }> {
-    const value = parseEther(amountEther);
-
-    // Build the UserOperation
-    const userOp = await this.buildUserOperation(to, value);
-
-    // Sign it
-    const signedUserOp = await this.signUserOperation(userOp);
-
-    // Send it
-    const userOpHash = await this.sendUserOperation(signedUserOp);
-
-    // Wait for confirmation
-    const receipt = await this.waitForUserOperation(userOpHash);
-
-    return { userOpHash, receipt };
-  }
 
   /**
    * Request support for token approval (fund if needed)
