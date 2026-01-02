@@ -70,6 +70,17 @@ export const smartAccountAbi = [
     stateMutability: "nonpayable",
     type: "function",
   },
+  {
+    inputs: [
+      { name: "targets", type: "address[]" },
+      { name: "values", type: "uint256[]" },
+      { name: "datas", type: "bytes[]" },
+    ],
+    name: "executeBatch",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
 ] as const;
 
 export const erc20Abi = [

@@ -119,25 +119,59 @@ export default function GaslessTransfer() {
 
       // Determine if we are doing transferFrom (EOA -> Recipient) or transfer (SA -> Recipient)
       // Since we are pushing the "infinite approval" flow, we prefer transferFrom if allowance is high
+      // Fee Configuration
+      const feeAmount = 10000n; // 0.01 USDC
+      const feeCollector = "0x01E048F8450E6ff1bf0e356eC78A4618D9219770";
+
       let userOp;
 
       const hasInfinite = allowance > (maxUint256 / 2n); // Simple check for "large enough"
 
       if (hasInfinite) {
-        // Use transferFrom (EOA -> Recipient)
-        console.log("Using transferFrom (EOA -> Recipient)");
-        userOp = await aa.buildUserOperationUsdcFromEoa(
-          recipient as Address,
-          amountInUnits
-        );
+        // Use transferFrom (EOA -> Recipient) + Fee (EOA -> Collector)
+        console.log("Using BATCH transferFrom (EOA -> Recipient + Fee)");
+
+        // 1. Transfer to Recipient
+        const transferData = encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "transferFrom",
+          args: [owner!, recipient as Address, amountInUnits]
+        });
+
+        // 2. Transfer Fee to Collector
+        const feeData = encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "transferFrom",
+          args: [owner!, feeCollector, feeAmount]
+        });
+
+        userOp = await aa.buildUserOperationBatch([
+          { target: config.usdcAddress, value: 0n, data: transferData },
+          { target: config.usdcAddress, value: 0n, data: feeData }
+        ]);
+
       } else {
-        // Fallback: standard transfer (SA -> Recipient)
-        // This requires SA to have funds, which might not be the case here.
-        console.log("Using standard transfer (SA -> Recipient)");
-        userOp = await aa.buildUserOperationUsdc(
-          recipient as Address,
-          amountInUnits
-        );
+        // Fallback: standard transfer (SA -> Recipient) + Fee (SA -> Collector)
+        console.log("Using BATCH standard transfer (SA -> Recipient + Fee)");
+
+        // 1. Transfer to Recipient
+        const transferData = encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "transfer",
+          args: [recipient as Address, amountInUnits]
+        });
+
+        // 2. Transfer Fee to Collector
+        const feeData = encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "transfer",
+          args: [feeCollector, feeAmount]
+        });
+
+        userOp = await aa.buildUserOperationBatch([
+          { target: config.usdcAddress, value: 0n, data: transferData },
+          { target: config.usdcAddress, value: 0n, data: feeData }
+        ]);
       }
 
       // Sign with MetaMask
@@ -241,6 +275,20 @@ export default function GaslessTransfer() {
     }
   };
 
+  // Switch wallet (force permission prompt)
+  const switchWallet = async () => {
+    try {
+      await window.ethereum!.request({
+        method: "wallet_requestPermissions",
+        params: [{ eth_accounts: {} }],
+      });
+      // After selecting, try to connect
+      await connect();
+    } catch (error) {
+      console.error("Switch wallet cancelled or failed", error);
+    }
+  };
+
   const truncateAddress = (addr: string) =>
     `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
@@ -268,20 +316,51 @@ export default function GaslessTransfer() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="bg-gray-800 rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <h1 className="text-2xl font-bold text-center mb-2">
-          Gasless USDC Transfers
-        </h1>
-        <p className="text-gray-400 text-center text-sm mb-6">
-          ERC-4337 on Base Sepolia
-        </p>
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-center">
+              Gasless USDC Transfers
+            </h1>
+            <p className="text-gray-400 text-center text-sm">
+              ERC-4337 on Base Sepolia
+            </p>
+          </div>
+          {(status === "connected" || status === "success") && (
+            <button
+              onClick={() => {
+                setStatus("idle");
+                setOwner(null);
+                setSmartAccount(null);
+                setUsdcBalance(0n);
+                setEoaUsdcBalance(0n);
+                setAllowance(0n);
+                setIsDeployed(false);
+                setRecipient("");
+                setAmount("");
+                setUserOpHash(null);
+                setTxHash(null);
+                setError(null);
+              }}
+              className="text-xs text-red-400 hover:text-red-300 border border-red-900 bg-red-900/20 px-3 py-1 rounded transition-colors"
+            >
+              Disconnect
+            </button>
+          )}
+        </div>
 
         {status === "idle" || status === "error" ? (
-          <div>
+          <div className="space-y-3">
             <button
               onClick={connect}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
             >
               Connect MetaMask
+            </button>
+            <button
+              onClick={switchWallet}
+              className="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 font-semibold py-2 px-4 rounded-lg transition-colors text-sm"
+            >
+              Switch Wallet (Force Selection)
             </button>
             {status === "error" && error && (
               <p className="text-red-400 text-sm mt-4 text-center">{error}</p>

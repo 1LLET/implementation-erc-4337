@@ -398,6 +398,9 @@ export class AccountAbstraction {
   /**
    * Build a complete UserOperation for USDC transfer using transferFrom (EOA -> Recipient)
    */
+  /**
+   * Build a complete UserOperation for USDC transfer using transferFrom (EOA -> Recipient)
+   */
   async buildUserOperationUsdcFromEoa(
     to: Address,
     amount: bigint
@@ -422,6 +425,57 @@ export class AccountAbstraction {
       abi: smartAccountAbi,
       functionName: "execute",
       args: [config.usdcAddress, 0n, transferFromData],
+    });
+
+    const nonce = await this.getNonce();
+
+    // Estimate gas
+    const gasEstimate = await this.estimateGas({
+      sender: this.smartAccountAddress,
+      nonce,
+      initCode: initCode as Hex,
+      callData,
+      paymasterAndData: config.paymasterAddress as Hex,
+    });
+
+    return {
+      sender: this.smartAccountAddress,
+      nonce,
+      initCode: initCode as Hex,
+      callData,
+      callGasLimit: BigInt(gasEstimate.callGasLimit),
+      verificationGasLimit: BigInt(gasEstimate.verificationGasLimit),
+      preVerificationGas: BigInt(gasEstimate.preVerificationGas),
+      maxFeePerGas: BigInt(gasEstimate.maxFeePerGas),
+      maxPriorityFeePerGas: BigInt(gasEstimate.maxPriorityFeePerGas),
+      paymasterAndData: config.paymasterAddress as Hex,
+      signature: "0x",
+    };
+  }
+
+  /**
+   * Build a UserOperation for Batched Execution (e.g. USDC Transfer + Fee)
+   */
+  async buildUserOperationBatch(
+    transactions: { target: Address; value: bigint; data: Hex }[]
+  ): Promise<UserOperation> {
+    if (!this.owner || !this.smartAccountAddress) {
+      throw new Error("Not connected");
+    }
+
+    const isDeployed = await this.isAccountDeployed();
+    const initCode = isDeployed ? "0x" : this.buildInitCode();
+
+    // Prepare arrays for executeBatch
+    const targets = transactions.map((tx) => tx.target);
+    const values = transactions.map((tx) => tx.value);
+    const datas = transactions.map((tx) => tx.data);
+
+    // Encode callData for executeBatch
+    const callData = encodeFunctionData({
+      abi: smartAccountAbi,
+      functionName: "executeBatch",
+      args: [targets, values, datas],
     });
 
     const nonce = await this.getNonce();
