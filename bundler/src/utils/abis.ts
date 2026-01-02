@@ -179,30 +179,6 @@ export const smartAccountAbi = [
 // SponsorPaymaster ABI
 export const paymasterAbi = [
   {
-    inputs: [{ name: "", type: "address" }],
-    name: "whitelistedAccounts",
-    outputs: [{ name: "", type: "bool" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      { name: "account", type: "address" },
-      { name: "whitelisted", type: "bool" },
-    ],
-    name: "setWhitelisted",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [{ name: "account", type: "address" }],
-    name: "getRemainingDailyAllowance",
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
     inputs: [],
     name: "getDeposit",
     outputs: [{ name: "", type: "uint256" }],
