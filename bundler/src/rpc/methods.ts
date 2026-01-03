@@ -1,8 +1,8 @@
-import { type Address, type Hash, formatEther } from "viem";
+import { type Address, type Hash } from "viem";
 import { type Config } from "../config.js";
-import { parseUserOp, type UserOperation } from "../utils/userOpHash.js";
+import { parseUserOp } from "../utils/userOpHash.js";
 import { validateUserOp } from "../services/validator.js";
-import { estimateUserOpGas, getNonce } from "../services/gasEstimator.js";
+import { estimateUserOpGas } from "../services/gasEstimator.js";
 import { executeUserOp, getUserOpReceipt, getUserOpByHash } from "../services/executor.js";
 import { requestApprovalSupport } from "../services/approvalService.js";
 

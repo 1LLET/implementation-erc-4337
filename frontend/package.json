@@ -14,7 +14,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "viem": "^2.7.0",
-    "wagmi": "^2.5.0"
+    "wagmi": "^2.5.0",
+    "@1llet.xyz/erc4337-gasless-sdk": "file:../sdk"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

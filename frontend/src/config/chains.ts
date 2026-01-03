@@ -1,31 +1,19 @@
 import { type Address, type Chain } from "viem";
-import { base, baseSepolia, arbitrum, mainnet, optimism, polygon, sepolia } from "viem/chains";
-import deployments from "../../../contracts/deployments.json";
-
-export interface ChainConfig {
-    chain: Chain;
-    rpcUrl: string;
-    bundlerUrl: string;
-    entryPointAddress: Address;
-    factoryAddress: Address;
-    paymasterAddress: Address;
-    usdcAddress: Address;
-}
-
-// Default addresses if not in deployments.json (fallbacks)
-const DEFAULT_ENTRYPOINT = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
-const DEFAULT_FACTORY = "0x9406Cc6185a346906296840746125a0E44976454"; // SimpleAccountFactory v0.6
+import { base, baseSepolia, arbitrum, optimism } from "viem/chains";
+import { type ChainConfig, DEPLOYMENTS } from "@1llet.xyz/erc4337-gasless-sdk";
 
 export const availableChains: Record<string, ChainConfig> = {};
 
-// Helper to populate config from deployments or defaults
+// Helper to populate config
 function createChainConfig(
     chain: Chain,
     networkName: string,
-    usdcAddress: Address,
     rpcUrl?: string
 ): ChainConfig {
-    const deployment = (deployments as any)[networkName];
+    // We can explicitly look up known deployments to expose usdcAddress to the UI if needed
+    // The SDK itself processes this automatically in the constructor, but we'll set it here
+    // so the frontend UI (like UsdcInfo) can access it easily.
+    const knownDeployment = DEPLOYMENTS[chain.id];
 
     return {
         chain,
@@ -33,41 +21,27 @@ function createChainConfig(
         bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
             ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}?chain=${networkName}`
             : `http://localhost:3000/rpc?chain=${networkName}`,
-        entryPointAddress: (deployment?.EntryPoint || DEFAULT_ENTRYPOINT) as Address,
-        factoryAddress: (deployment?.SmartAccountFactory || DEFAULT_FACTORY) as Address,
-        paymasterAddress: (deployment?.SponsorPaymaster || "") as Address, // Paymaster MUST be deployed
-        usdcAddress,
+        // Addresses below are optional since SDK v0.1.2+.
+        // The SDK resolves them automatically.
+        // We only provide usdcAddress if known, for UI convenience.
+        usdcAddress: knownDeployment?.usdc,
     };
 }
 
 // -- Base Sepolia --
-availableChains["baseSepolia"] = createChainConfig(
-    baseSepolia,
-    "baseSepolia",
-    "0x036CbD53842c5426634e7929541eC2318f3dCF7e" // USDC on Base Sepolia
-);
+availableChains["baseSepolia"] = createChainConfig(baseSepolia, "baseSepolia");
 
 // -- Base Mainnet --
 availableChains["base"] = createChainConfig(
     base,
     "base",
-    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC on Base Mainnet
     "https://base.publicnode.com" // Reliable public RPC
 );
 
 // -- Arbitrum --
-// Note: You need to deploy paymaster to Arbitrum first for this to work fully
-availableChains["arbitrum"] = createChainConfig(
-    arbitrum,
-    "arbitrum",
-    "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" // USDC on Arbitrum One
-);
+availableChains["arbitrum"] = createChainConfig(arbitrum, "arbitrum");
 
 // -- Optimism --
-availableChains["optimism"] = createChainConfig(
-    optimism,
-    "optimism",
-    "0x0b2C639c533813f4Aa9D7837CAf992c92bd58K1d" // USDC on Optimism
-);
+availableChains["optimism"] = createChainConfig(optimism, "optimism");
 
 export const defaultChainKey = "baseSepolia";

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { type Address, type Hash, formatUnits, encodeFunctionData, maxUint256 } from "viem";
 import { AccountAbstraction } from "@/lib/accountAbstraction";
-import { erc20Abi } from "@/config/contracts";
+import { erc20Abi } from "@1llet.xyz/erc4337-gasless-sdk";
 import { availableChains, defaultChainKey } from "@/config/chains";
 
 export type Status =
@@ -14,6 +14,8 @@ export type Status =
     | "confirming"
     | "success"
     | "error";
+
+
 
 export function useGaslessTransfer() {
     const [selectedChain, setSelectedChain] = useState<string>(defaultChainKey);
@@ -139,26 +141,14 @@ export function useGaslessTransfer() {
 
         try {
             setStatus("building");
-            const userOp = await aa.buildDeployUserOperation();
+            // Use SDK high-level method
+            const receipt = await aa.deployAccount();
 
-            setStatus("signing");
-            const signedUserOp = await aa.signUserOperation(userOp);
-
-            setStatus("sending");
-            const hash = await aa.sendUserOperation(signedUserOp);
-            setUserOpHash(hash);
-
-            setStatus("confirming");
-            const receipt = await aa.waitForUserOperation(hash);
             setTxHash(receipt.receipt.transactionHash);
+            setStatus("success");
+            setIsDeployed(true);
+            refreshBalance();
 
-            if (receipt.success) {
-                setStatus("success");
-                setIsDeployed(true);
-                refreshBalance();
-            } else {
-                throw new Error("Deployment failed on-chain");
-            }
         } catch (err) {
             console.error("Deployment error:", err);
             setError(err instanceof Error ? err.message : "Deployment failed");
@@ -170,55 +160,27 @@ export function useGaslessTransfer() {
         if (!owner || !smartAccount) return;
 
         try {
+            const chainConfig = availableChains[selectedChain];
+            if (!chainConfig.usdcAddress) throw new Error("USDC address not configured for this chain");
+
             setStatus("signing");
             setError(null);
 
-            const amountUnits = maxUint256;
-            const chainConfig = availableChains[selectedChain];
+            // Use SDK high-level method
+            const result = await aa.approveToken(chainConfig.usdcAddress, smartAccount);
 
-            const support = await aa.requestApprovalSupport(
-                chainConfig.usdcAddress,
-                smartAccount,
-                amountUnits
-            );
-
-            console.log("Approval Support:", support);
-
-            if (support.type === "approve") {
-                if (support.fundedAmount && support.fundedAmount !== "0") {
-                    console.log(`Funded ${support.fundedAmount} ETH for gas`);
-                }
-
-                const data = encodeFunctionData({
-                    abi: erc20Abi,
-                    functionName: "approve",
-                    args: [smartAccount, amountUnits]
-                });
-
-                const txHash = await window.ethereum!.request({
-                    method: "eth_sendTransaction",
-                    params: [{
-                        from: owner,
-                        to: chainConfig.usdcAddress,
-                        data,
-                    }]
-                }) as Hash;
-
+            if (result === "NOT_NEEDED") {
+                console.log("Approval not needed");
+                setStatus("success");
+            } else {
+                setTxHash(result);
                 setStatus("sending");
-                setTxHash(txHash);
 
                 setStatus("confirming");
                 setTimeout(() => {
                     setStatus("success");
                     refreshBalance();
                 }, 5000);
-
-            } else if (support.type === "permit") {
-                setError("Permit supported but not implemented in frontend demo.");
-                setStatus("error");
-            } else {
-                console.log("Approval not needed");
-                setStatus("success");
             }
 
         } catch (err) {
@@ -252,6 +214,7 @@ export function useGaslessTransfer() {
             const feeCollector = "0x01E048F8450E6ff1bf0e356eC78A4618D9219770";
 
             const chainConfig = availableChains[selectedChain];
+            if (!chainConfig.usdcAddress) throw new Error("USDC address not configured for this chain");
 
             let userOp;
             const hasInfinite = allowance > (maxUint256 / 2n);
