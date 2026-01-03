@@ -143,6 +143,39 @@ const address = await aa.getSmartAccountAddress(ownerAddress);
 const receipt = await aa.deployAccount();
 ```
 
+### Simplified Transactions (v0.2.0+)
+
+Send transactions without manually building, signing, and waiting.
+
+```typescript
+// 1. Send ETH or Call Contract (Single)
+const receipt = await aa.sendTransaction({
+    target: "0x123...",
+    value: 1000000000000000000n, // 1 ETH
+    data: "0x..." // Optional callData
+});
+
+// 2. Send Multiple Transactions (Batch)
+// Great for approving + swapping, or multiple transfers
+const receipt = await aa.sendBatchTransaction([
+    { target: "0xToken...", data: encodeApproveData },
+    { target: "0xSwap...", data: encodeSwapData }
+]);
+
+// 3. Transfer ERC-20 Tokens (Helper)
+// Automatically encodes the transfer call
+const receipt = await aa.transfer(
+    usdcAddress, 
+    recipientAddress, 
+    1000000n // 1 USDC
+);
+```
+
+### Error Decoding
+The SDK now automatically tries to decode cryptic "0x..." errors from the EntryPoint into readable messages like:
+- `Smart Account Error: Transfer amount exceeds balance`
+- `Smart Account: Native transfer failed`
+
 ### Simplified Approvals
 
 ```typescript

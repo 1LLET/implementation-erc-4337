@@ -7,7 +7,8 @@ import {
     type Address,
     type Hash,
     type Hex,
-    type PublicClient
+    type PublicClient,
+    decodeErrorResult
 } from "viem";
 import {
     factoryAbi,
@@ -453,6 +454,80 @@ export class AccountAbstraction {
     }
 
     /**
+     * Send a single transaction via the Smart Account
+     * Abstracts: Build -> Sign -> Send -> Wait
+     */
+    async sendTransaction(
+        tx: { target: Address; value?: bigint; data?: Hex }
+    ): Promise<UserOpReceipt> {
+        return this.sendBatchTransaction([tx]);
+    }
+
+    /**
+     * Send multiple transactions via the Smart Account (Batched)
+     * Abstracts: Build -> Sign -> Send -> Wait
+     */
+    async sendBatchTransaction(
+        txs: { target: Address; value?: bigint; data?: Hex }[]
+    ): Promise<UserOpReceipt> {
+        // Normalize input (default value to 0, data to 0x)
+        const transactions = txs.map(tx => ({
+            target: tx.target,
+            value: tx.value ?? 0n,
+            data: tx.data ?? "0x"
+        }));
+
+        try {
+            const userOp = await this.buildUserOperationBatch(transactions);
+            const signed = await this.signUserOperation(userOp);
+            const hash = await this.sendUserOperation(signed);
+            return await this.waitForUserOperation(hash);
+        } catch (error) {
+            throw this.decodeError(error);
+        }
+    }
+
+    /**
+     * Try to decode meaningful errors from RPC or Revert data
+     */
+    private decodeError(error: any): Error {
+        const msg = error?.message || "";
+
+        // 1. Try to find hex data in the error message (UserOp Revert)
+        // Look for 0x... in "data": "0x..." or in the message itself
+        const hexMatch = msg.match(/(0x[0-9a-fA-F]+)/);
+
+        if (hexMatch) {
+            try {
+                // Try decoding as standard Error(string)
+                const decoded = decodeErrorResult({
+                    abi: [
+                        {
+                            inputs: [{ name: "message", type: "string" }],
+                            name: "Error",
+                            type: "error"
+                        },
+                        // Add common EntryPoint errors if known, but generic Reverts are most common
+                    ],
+                    data: hexMatch[0] as Hex
+                });
+
+                if (decoded.errorName === "Error") {
+                    return new Error(`Smart Account Error: ${decoded.args[0]}`);
+                }
+            } catch (e) {
+                // Failed to decode, stick to original
+            }
+        }
+
+        // 2. Common EntryPoint error mapping (simplified)
+        if (msg.includes("AA21")) return new Error("Smart Account: Native transfer failed (ETH missing?)");
+        if (msg.includes("AA25")) return new Error("Smart Account: Invalid account nonce");
+
+        return error instanceof Error ? error : new Error(String(error));
+    }
+
+    /**
      * Approve a token for the Smart Account (EOA -> Token -> Smart Account)
      * Checks for gas sponsorship (Relayer funding) if needed.
      */
@@ -493,6 +568,27 @@ export class AccountAbstraction {
         }
 
         return "NOT_NEEDED";
+    }
+
+    /**
+     * Transfer ERC-20 tokens from the Smart Account to a recipient
+     */
+    async transfer(
+        token: Address,
+        recipient: Address,
+        amount: bigint
+    ): Promise<UserOpReceipt> {
+        const data = encodeFunctionData({
+            abi: erc20Abi,
+            functionName: "transfer",
+            args: [recipient, amount]
+        });
+
+        return this.sendTransaction({
+            target: token,
+            value: 0n,
+            data
+        });
     }
 
     // Getters

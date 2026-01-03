@@ -216,67 +216,89 @@ export function useGaslessTransfer() {
             const chainConfig = availableChains[selectedChain];
             if (!chainConfig.usdcAddress) throw new Error("USDC address not configured for this chain");
 
-            let userOp;
+            // Determine Source: Smart Account vs EOA
+            // Priority:
+            // 1. Smart Account (if it has enough balance)
+            // 2. EOA (if it has enough balance AND allowance)
+
+            const isProd = process.env.NODE_ENV !== "development";
+            const totalNeeded = amountInUnits + (isProd ? feeAmount : 0n);
             const hasInfinite = allowance > (maxUint256 / 2n);
 
-            if (hasInfinite) {
-                console.log("Using BATCH transferFrom (EOA -> Recipient + Fee)");
+            let useEoa = false;
+            let userOp;
 
-                const transferData = encodeFunctionData({
-                    abi: erc20Abi,
-                    functionName: "transferFrom",
-                    args: [owner!, recipient as Address, amountInUnits]
-                });
-
-                const feeData = encodeFunctionData({
-                    abi: erc20Abi,
-                    functionName: "transferFrom",
-                    args: [owner!, feeCollector, feeAmount]
-                });
-
-                userOp = await aa.buildUserOperationBatch([
-                    { target: chainConfig.usdcAddress, value: 0n, data: transferData },
-                    { target: chainConfig.usdcAddress, value: 0n, data: feeData }
-                ]);
-
+            if (usdcBalance >= totalNeeded) {
+                console.log("Using Smart Account Balance (Standard Transfer)");
+                useEoa = false;
+            } else if (hasInfinite && eoaUsdcBalance >= totalNeeded) {
+                console.log("Using EOA Balance (TransferFrom)");
+                useEoa = true;
             } else {
-                console.log("Using BATCH standard transfer (SA -> Recipient + Fee)");
+                throw new Error(`Insufficient funds. Needed: ${formatUnits(totalNeeded, 6)} USDC. Available: SA=${formatUnits(usdcBalance, 6)}, EOA=${formatUnits(eoaUsdcBalance, 6)}`);
+            }
 
-                const transferData = encodeFunctionData({
-                    abi: erc20Abi,
-                    functionName: "transfer",
-                    args: [recipient as Address, amountInUnits]
+            const transactions = [];
+
+            if (useEoa) {
+                // EOA -> Recipient
+                transactions.push({
+                    target: chainConfig.usdcAddress,
+                    value: 0n,
+                    data: encodeFunctionData({
+                        abi: erc20Abi,
+                        functionName: "transferFrom",
+                        args: [owner!, recipient as Address, amountInUnits]
+                    })
                 });
 
-                const feeData = encodeFunctionData({
-                    abi: erc20Abi,
-                    functionName: "transfer",
-                    args: [feeCollector, feeAmount]
+                // EOA -> Fee Collector
+                if (isProd) {
+                    transactions.push({
+                        target: chainConfig.usdcAddress,
+                        value: 0n,
+                        data: encodeFunctionData({
+                            abi: erc20Abi,
+                            functionName: "transferFrom",
+                            args: [owner!, feeCollector, feeAmount]
+                        })
+                    });
+                }
+            } else {
+                // Smart Account -> Recipient
+                transactions.push({
+                    target: chainConfig.usdcAddress,
+                    value: 0n,
+                    data: encodeFunctionData({
+                        abi: erc20Abi,
+                        functionName: "transfer",
+                        args: [recipient as Address, amountInUnits]
+                    })
                 });
 
-                userOp = await aa.buildUserOperationBatch([
-                    { target: chainConfig.usdcAddress, value: 0n, data: transferData },
-                    { target: chainConfig.usdcAddress, value: 0n, data: feeData }
-                ]);
+                // Smart Account -> Fee Collector
+                if (isProd) {
+                    transactions.push({
+                        target: chainConfig.usdcAddress,
+                        value: 0n,
+                        data: encodeFunctionData({
+                            abi: erc20Abi,
+                            functionName: "transfer",
+                            args: [feeCollector, feeAmount]
+                        })
+                    });
+                }
             }
 
             setStatus("signing");
-            const signedUserOp = await aa.signUserOperation(userOp);
+            // Use SDK v0.2.0 high-level batch method
+            // This handles build -> sign -> send -> wait AND error decoding
+            const receipt = await aa.sendBatchTransaction(transactions);
 
-            setStatus("sending");
-            const hash = await aa.sendUserOperation(signedUserOp);
-            setUserOpHash(hash);
-
-            setStatus("confirming");
-            const receipt = await aa.waitForUserOperation(hash);
             setTxHash(receipt.receipt.transactionHash);
+            setStatus("success");
+            refreshBalance();
 
-            if (receipt.success) {
-                setStatus("success");
-                refreshBalance();
-            } else {
-                throw new Error("UserOperation failed on-chain");
-            }
         } catch (err) {
             console.error("Transfer error:", err);
             setError(err instanceof Error ? err.message : "Transfer failed");
