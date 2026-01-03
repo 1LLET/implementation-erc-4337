@@ -161,13 +161,13 @@ export function useGaslessTransfer() {
 
         try {
             const chainConfig = availableChains[selectedChain];
-            if (!chainConfig.usdcAddress) throw new Error("USDC address not configured for this chain");
+            const usdcAddress = aa.getTokenAddress("USDC");
 
             setStatus("signing");
             setError(null);
 
             // Use SDK high-level method
-            const result = await aa.approveToken(chainConfig.usdcAddress, smartAccount);
+            const result = await aa.approveToken(usdcAddress, smartAccount);
 
             if (result === "NOT_NEEDED") {
                 console.log("Approval not needed");
@@ -213,8 +213,7 @@ export function useGaslessTransfer() {
             const feeAmount = 10000n; // 0.01 USDC
             const feeCollector = "0x01E048F8450E6ff1bf0e356eC78A4618D9219770";
 
-            const chainConfig = availableChains[selectedChain];
-            if (!chainConfig.usdcAddress) throw new Error("USDC address not configured for this chain");
+            const usdcAddress = aa.getTokenAddress("USDC");
 
             // Determine Source: Smart Account vs EOA
             // Priority:
@@ -226,7 +225,6 @@ export function useGaslessTransfer() {
             const hasInfinite = allowance > (maxUint256 / 2n);
 
             let useEoa = false;
-            let userOp;
 
             if (usdcBalance >= totalNeeded) {
                 console.log("Using Smart Account Balance (Standard Transfer)");
@@ -238,12 +236,13 @@ export function useGaslessTransfer() {
                 throw new Error(`Insufficient funds. Needed: ${formatUnits(totalNeeded, 6)} USDC. Available: SA=${formatUnits(usdcBalance, 6)}, EOA=${formatUnits(eoaUsdcBalance, 6)}`);
             }
 
+
             const transactions = [];
 
             if (useEoa) {
                 // EOA -> Recipient
                 transactions.push({
-                    target: chainConfig.usdcAddress,
+                    target: usdcAddress,
                     value: 0n,
                     data: encodeFunctionData({
                         abi: erc20Abi,
@@ -255,7 +254,7 @@ export function useGaslessTransfer() {
                 // EOA -> Fee Collector
                 if (isProd) {
                     transactions.push({
-                        target: chainConfig.usdcAddress,
+                        target: usdcAddress,
                         value: 0n,
                         data: encodeFunctionData({
                             abi: erc20Abi,
@@ -267,7 +266,7 @@ export function useGaslessTransfer() {
             } else {
                 // Smart Account -> Recipient
                 transactions.push({
-                    target: chainConfig.usdcAddress,
+                    target: usdcAddress,
                     value: 0n,
                     data: encodeFunctionData({
                         abi: erc20Abi,
@@ -279,7 +278,7 @@ export function useGaslessTransfer() {
                 // Smart Account -> Fee Collector
                 if (isProd) {
                     transactions.push({
-                        target: chainConfig.usdcAddress,
+                        target: usdcAddress,
                         value: 0n,
                         data: encodeFunctionData({
                             abi: erc20Abi,

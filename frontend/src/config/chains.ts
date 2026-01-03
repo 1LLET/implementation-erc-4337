@@ -1,47 +1,31 @@
-import { type Address, type Chain } from "viem";
-import { base, baseSepolia, arbitrum, optimism } from "viem/chains";
-import { type ChainConfig, DEPLOYMENTS } from "@1llet.xyz/erc4337-gasless-sdk";
+import { type ChainConfig, BASE_MAINNET, BASE_SEPOLIA } from "@1llet.xyz/erc4337-gasless-sdk";
+import { arbitrum, optimism } from "viem/chains";
 
 export const availableChains: Record<string, ChainConfig> = {};
 
-// Helper to populate config
-function createChainConfig(
-    chain: Chain,
-    networkName: string,
-    rpcUrl?: string
-): ChainConfig {
-    // We can explicitly look up known deployments to expose usdcAddress to the UI if needed
-    // The SDK itself processes this automatically in the constructor, but we'll set it here
-    // so the frontend UI (like UsdcInfo) can access it easily.
-    const knownDeployment = DEPLOYMENTS[chain.id];
-
-    return {
-        chain,
-        rpcUrl: rpcUrl || chain.rpcUrls.default.http[0],
-        bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
-            ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}?chain=${networkName}`
-            : `http://localhost:3000/rpc?chain=${networkName}`,
-        // Addresses below are optional since SDK v0.1.2+.
-        // The SDK resolves them automatically.
-        // We only provide usdcAddress if known, for UI convenience.
-        usdcAddress: knownDeployment?.usdc,
-    };
-}
-
 // -- Base Sepolia --
-availableChains["baseSepolia"] = createChainConfig(baseSepolia, "baseSepolia");
+// Clone and override bundlerUrl if env var is set
+availableChains["baseSepolia"] = {
+    ...BASE_SEPOLIA,
+    bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
+        ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}?chain=baseSepolia`
+        : BASE_SEPOLIA.bundlerUrl
+};
 
 // -- Base Mainnet --
-availableChains["base"] = createChainConfig(
-    base,
-    "base",
-    "https://base.publicnode.com" // Reliable public RPC
-);
+availableChains["base"] = {
+    ...BASE_MAINNET,
+    bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
+        ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}?chain=base`
+        : BASE_MAINNET.bundlerUrl
+};
 
-// -- Arbitrum --
-availableChains["arbitrum"] = createChainConfig(arbitrum, "arbitrum");
-
-// -- Optimism --
-availableChains["optimism"] = createChainConfig(optimism, "optimism");
+// Helper for other chains if needed (Optional, user focused on Base)
+// Leaving other chains empty or commented out for now as I don't have SDK configs for them yet.
+// Or I can construct them manually matching the new interface if strictly needed.
+// Given the user said "hazlo por el momento solo base", I will simply comment out others or provide minimal valid config?
+// The user removed Arbitrum from SDK.
+// I will keep existing logic for "arbitrum" but fix the type error if I can resolve addresses or just leave empty tokens for now?
+// Actually simpler to just expose Base as requested.
 
 export const defaultChainKey = "baseSepolia";

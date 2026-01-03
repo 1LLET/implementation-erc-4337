@@ -1,5 +1,11 @@
 import { type Address, type Chain, type Hash, type Hex } from "viem";
 
+export interface Token {
+    symbol: string;
+    decimals: number;
+    address: Address;
+}
+
 export interface ChainConfig {
     chain: Chain;
     rpcUrl?: string; // Optional, defaults to chain.rpcUrls.default
@@ -7,7 +13,7 @@ export interface ChainConfig {
     entryPointAddress?: Address;
     factoryAddress?: Address;
     paymasterAddress?: Address;
-    usdcAddress?: Address;
+    tokens: Token[];
 }
 
 export interface UserOperation {

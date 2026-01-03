@@ -17,20 +17,14 @@ yarn add @1llet.xyz/erc4337-gasless-sdk viem
 Define the chain configuration (including your Bundler URL and Paymaster).
 
 ```typescript
-import { type ChainConfig } from "@1llet.xyz/erc4337-gasless-sdk";
-import { baseSepolia } from "viem/chains";
+// 1. Import Config (Chain Registry)
+import { BASE_SEPOLIA, type ChainConfig } from "@1llet.xyz/erc4337-gasless-sdk";
+import { AccountAbstraction } from "@1llet.xyz/erc4337-gasless-sdk";
 
-const config: ChainConfig = {
-  chain: baseSepolia,
-  // Your Bundler URL (must support ERC-4337 methods)
-  bundlerUrl: "https://api.yourbundler.com/rpc", 
-  // Optional: Override RPC URL (defaults to chain.rpcUrls.default)
-  // rpcUrl: "https://sepolia.base.org",
-  
-  // Addresses are automatically resolved for supported chains (Base, Base Sepolia)
-  // You can override them if needed:
-  // factoryAddress: "0x...", 
-};
+// 2. Initialize
+const aa = new AccountAbstraction(BASE_SEPOLIA);
+
+await aa.connect();
 ```
 
 ### 2. Initialize & Connect
@@ -163,13 +157,30 @@ const receipt = await aa.sendBatchTransaction([
 ]);
 
 // 3. Transfer ERC-20 Tokens (Helper)
-// Automatically encodes the transfer call
-const receipt = await aa.transfer(
-    usdcAddress, 
-    recipientAddress, 
-    1000000n // 1 USDC
-);
+// Automatically encodes the
+// 1. Transfer ERC-20 (USDC)
+await aa.transfer("USDC", recipient, amount);
+
+// 2. Transfer Native Token (ETH)
+// The SDK detects the "ETH" symbol and sends a native transaction
+await aa.transfer("ETH", recipient, amount);
 ```
+
+// 2. Transfer Native Token (ETH)
+// The SDK detects the "ETH" symbol and sends a native transaction
+await aa.transfer("ETH", recipient, amount);
+```
+
+### Funding the Account
+
+Easily deposit ETH from the connected wallet (EOA) to the Smart Account.
+
+```typescript
+// Deposit 0.1 ETH
+const txHash = await aa.deposit(100000000000000000n);
+```
+
+### High-Level Methods
 
 ### Error Decoding
 The SDK now automatically tries to decode cryptic "0x..." errors from the EntryPoint into readable messages like:

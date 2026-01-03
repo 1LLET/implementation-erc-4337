@@ -1,9 +1,6 @@
 import {
     createPublicClient,
     http,
-    encodeFunctionData,
-    encodeAbiParameters,
-    keccak256,
     type Address,
     type Hash,
     type Hex,
@@ -12,19 +9,17 @@ import {
 } from "viem";
 import {
     factoryAbi,
-    entryPointAbi,
-    smartAccountAbi,
-    erc20Abi,
 } from "./constants";
 import {
     type ChainConfig,
     type UserOperation,
-    type GasEstimate,
     type UserOpReceipt,
-    type ApprovalSupportResult
+    type ApprovalSupportResult,
+    type Token
 } from "./types";
-import { DEPLOYMENTS } from "./deployments";
 import { BundlerClient } from "./BundlerClient";
+import { TokenService } from "./TokenService";
+import { UserOpBuilder } from "./UserOpBuilder";
 
 /**
  * ERC-4337 Account Abstraction Client
@@ -36,41 +31,35 @@ export class AccountAbstraction {
     private publicClient: PublicClient;
     private bundlerClient: BundlerClient;
 
+    // Services
+    private tokenService: TokenService;
+    private userOpBuilder: UserOpBuilder;
+
     // Resolved addresses
     private entryPointAddress: Address;
     private factoryAddress: Address;
-    private paymasterAddress?: Address;
-    private usdcAddress: Address;
 
     constructor(chainConfig: ChainConfig) {
         this.chainConfig = chainConfig;
-        const chainId = chainConfig.chain.id;
-        const defaults = DEPLOYMENTS[chainId];
 
-        // Resolve addresses (Config > Defaults > Error)
-        const entryPoint = chainConfig.entryPointAddress || defaults?.entryPoint;
-        if (!entryPoint) throw new Error(`EntryPoint address not found for chain ${chainId}`);
-        this.entryPointAddress = entryPoint;
+        // Validation
+        if (!chainConfig.entryPointAddress) throw new Error("EntryPoint address required");
+        this.entryPointAddress = chainConfig.entryPointAddress;
+        if (!chainConfig.factoryAddress) throw new Error("Factory address required");
+        this.factoryAddress = chainConfig.factoryAddress;
 
-        const factory = chainConfig.factoryAddress || defaults?.factory;
-        if (!factory) throw new Error(`Factory address not found for chain ${chainId}`);
-        this.factoryAddress = factory;
-
-        const usdc = chainConfig.usdcAddress || defaults?.usdc;
-        if (!usdc) throw new Error(`USDC address not found for chain ${chainId}`);
-        this.usdcAddress = usdc;
-
-        this.paymasterAddress = chainConfig.paymasterAddress || defaults?.paymaster;
-
-        // Use provided RPC or default from chain
+        // Setup Clients
         const rpcUrl = chainConfig.rpcUrl || chainConfig.chain.rpcUrls.default.http[0];
-
         this.publicClient = createPublicClient({
             chain: chainConfig.chain,
             transport: http(rpcUrl),
         });
 
         this.bundlerClient = new BundlerClient(chainConfig, this.entryPointAddress);
+
+        // Setup Services
+        this.tokenService = new TokenService(chainConfig, this.publicClient);
+        this.userOpBuilder = new UserOpBuilder(chainConfig, this.bundlerClient, this.publicClient);
     }
 
     /**
@@ -86,19 +75,15 @@ export class AccountAbstraction {
             method: "eth_requestAccounts",
         })) as string[];
 
-        if (!accounts || accounts.length === 0) {
-            throw new Error("No accounts found");
-        }
+        if (!accounts || accounts.length === 0) throw new Error("No accounts found");
 
         // Check network
         const chainId = (await window.ethereum.request({
             method: "eth_chainId",
         })) as string;
-
         const targetChainId = this.chainConfig.chain.id;
 
         if (parseInt(chainId, 16) !== targetChainId) {
-            // Switch to configured chain
             try {
                 await window.ethereum.request({
                     method: "wallet_switchEthereumChain",
@@ -106,7 +91,6 @@ export class AccountAbstraction {
                 });
             } catch (switchError: unknown) {
                 const error = switchError as { code?: number };
-                // Chain not added, add it
                 if (error.code === 4902) {
                     await window.ethereum.request({
                         method: "wallet_addEthereumChain",
@@ -115,7 +99,7 @@ export class AccountAbstraction {
                                 chainId: "0x" + targetChainId.toString(16),
                                 chainName: this.chainConfig.chain.name,
                                 nativeCurrency: this.chainConfig.chain.nativeCurrency,
-                                rpcUrls: [this.chainConfig.rpcUrl],
+                                rpcUrls: [this.chainConfig.rpcUrl || this.chainConfig.chain.rpcUrls.default.http[0]],
                                 blockExplorerUrls: this.chainConfig.chain.blockExplorers?.default?.url
                                     ? [this.chainConfig.chain.blockExplorers.default.url]
                                     : [],
@@ -138,14 +122,14 @@ export class AccountAbstraction {
     }
 
     /**
-     * Get the Smart Account address for an owner (counterfactual)
+     * Get the Smart Account address for an owner
      */
     async getSmartAccountAddress(owner: Address): Promise<Address> {
         const address = await this.publicClient.readContract({
             address: this.factoryAddress,
             abi: factoryAbi,
             functionName: "getAccountAddress",
-            args: [owner, 0n], // salt = 0
+            args: [owner, 0n],
         }) as Address;
         return address;
     }
@@ -154,331 +138,38 @@ export class AccountAbstraction {
      * Check if the Smart Account is deployed
      */
     async isAccountDeployed(): Promise<boolean> {
-        if (!this.smartAccountAddress) {
-            throw new Error("Not connected");
-        }
-
-        const code = await this.publicClient.getCode({
-            address: this.smartAccountAddress,
-        });
-        return code !== undefined && code !== "0x";
+        if (!this.smartAccountAddress) throw new Error("Not connected");
+        return this.userOpBuilder.isAccountDeployed(this.smartAccountAddress);
     }
 
+    // --- Token Methods (Delegated) ---
 
-    /**
-     * Get the USDC balance of the Smart Account
-     */
+    getTokenAddress(token: string | Address): Address {
+        return this.tokenService.getTokenAddress(token);
+    }
+
     async getUsdcBalance(): Promise<bigint> {
-        if (!this.smartAccountAddress) {
-            throw new Error("Not connected");
-        }
-
-        return await this.publicClient.readContract({
-            address: this.usdcAddress,
-            abi: erc20Abi,
-            functionName: "balanceOf",
-            args: [this.smartAccountAddress],
-        }) as bigint;
+        if (!this.smartAccountAddress) throw new Error("Not connected");
+        return this.tokenService.getBalance("USDC", this.smartAccountAddress);
     }
 
-
-    /**
-     * Get the EOA's USDC balance
-     */
     async getEoaUsdcBalance(): Promise<bigint> {
-        if (!this.owner) {
-            throw new Error("Not connected");
-        }
-
-        return await this.publicClient.readContract({
-            address: this.usdcAddress,
-            abi: erc20Abi,
-            functionName: "balanceOf",
-            args: [this.owner],
-        }) as bigint;
+        if (!this.owner) throw new Error("Not connected");
+        return this.tokenService.getBalance("USDC", this.owner);
     }
 
-    /**
-     * Get the allowance of the Smart Account to spend the EOA's USDC
-     */
     async getAllowance(): Promise<bigint> {
-        if (!this.owner || !this.smartAccountAddress) {
-            throw new Error("Not connected");
-        }
-
-        return await this.publicClient.readContract({
-            address: this.usdcAddress,
-            abi: erc20Abi,
-            functionName: "allowance",
-            args: [this.owner, this.smartAccountAddress],
-        }) as bigint;
+        if (!this.owner || !this.smartAccountAddress) throw new Error("Not connected");
+        return this.tokenService.getAllowance("USDC", this.owner, this.smartAccountAddress);
     }
 
-    /**
-     * Get the nonce for the Smart Account
-     */
-    async getNonce(): Promise<bigint> {
-        if (!this.smartAccountAddress) {
-            throw new Error("Not connected");
-        }
+    // --- Transactions ---
 
-        return await this.publicClient.readContract({
-            address: this.entryPointAddress,
-            abi: entryPointAbi,
-            functionName: "getNonce",
-            args: [this.smartAccountAddress, 0n],
-        }) as bigint;
-    }
-
-    /**
-     * Build initCode for account deployment
-     */
-    buildInitCode(): Hex {
-        if (!this.owner) {
-            throw new Error("Not connected");
-        }
-
-        const createAccountData = encodeFunctionData({
-            abi: factoryAbi,
-            functionName: "createAccount",
-            args: [this.owner, 0n],
-        });
-
-        return `${this.factoryAddress}${createAccountData.slice(2)}` as Hex;
-    }
-
-
-    /**
-     * Estimate gas for a UserOperation
-     */
-    async estimateGas(userOp: Partial<UserOperation>): Promise<GasEstimate> {
-        return this.bundlerClient.estimateGas(userOp);
-    }
-
-
-    /**
-     * Build a UserOperation for Batched Execution (e.g. USDC Transfer + Fee)
-     */
-    async buildUserOperationBatch(
-        transactions: { target: Address; value: bigint; data: Hex }[]
-    ): Promise<UserOperation> {
-        if (!this.owner || !this.smartAccountAddress) {
-            throw new Error("Not connected");
-        }
-
-        const isDeployed = await this.isAccountDeployed();
-        const initCode = isDeployed ? "0x" : this.buildInitCode();
-
-        // Prepare arrays for executeBatch
-        const targets = transactions.map((tx) => tx.target);
-        const values = transactions.map((tx) => tx.value);
-        const datas = transactions.map((tx) => tx.data);
-
-        // Encode callData for executeBatch
-        const callData = encodeFunctionData({
-            abi: smartAccountAbi,
-            functionName: "executeBatch",
-            args: [targets, values, datas],
-        });
-
-        const nonce = await this.getNonce();
-
-        // Estimate gas
-        const gasEstimate = await this.estimateGas({
-            sender: this.smartAccountAddress,
-            nonce,
-            initCode: initCode as Hex,
-            callData,
-            paymasterAndData: this.paymasterAddress as Hex,
-        });
-
-        return {
-            sender: this.smartAccountAddress,
-            nonce,
-            initCode: initCode as Hex,
-            callData,
-            callGasLimit: BigInt(gasEstimate.callGasLimit),
-            verificationGasLimit: BigInt(gasEstimate.verificationGasLimit),
-            preVerificationGas: BigInt(gasEstimate.preVerificationGas),
-            maxFeePerGas: BigInt(gasEstimate.maxFeePerGas),
-            maxPriorityFeePerGas: BigInt(gasEstimate.maxPriorityFeePerGas),
-            paymasterAndData: this.paymasterAddress as Hex,
-            signature: "0x",
-        };
-    }
-
-    /**
-     * Build a UserOperation to ONLY deploy the account (empty callData)
-     */
-    async buildDeployUserOperation(): Promise<UserOperation> {
-        if (!this.owner || !this.smartAccountAddress) {
-            throw new Error("Not connected");
-        }
-
-        const isDeployed = await this.isAccountDeployed();
-        if (isDeployed) {
-            throw new Error("Account is already deployed");
-        }
-
-        const initCode = this.buildInitCode();
-        const callData = "0x"; // Empty callData for deployment only
-        const nonce = await this.getNonce();
-
-        // Estimate gas
-        const gasEstimate = await this.estimateGas({
-            sender: this.smartAccountAddress,
-            nonce,
-            initCode: initCode as Hex,
-            callData,
-            paymasterAndData: this.paymasterAddress as Hex,
-        });
-
-        return {
-            sender: this.smartAccountAddress,
-            nonce,
-            initCode: initCode as Hex,
-            callData,
-            callGasLimit: BigInt(gasEstimate.callGasLimit),
-            verificationGasLimit: BigInt(gasEstimate.verificationGasLimit),
-            preVerificationGas: BigInt(gasEstimate.preVerificationGas),
-            maxFeePerGas: BigInt(gasEstimate.maxFeePerGas),
-            maxPriorityFeePerGas: BigInt(gasEstimate.maxPriorityFeePerGas),
-            paymasterAndData: this.paymasterAddress as Hex,
-            signature: "0x",
-        };
-    }
-
-    /**
-     * Calculate the UserOperation hash
-     */
-    getUserOpHash(userOp: UserOperation): Hex {
-        const packed = encodeAbiParameters(
-            [
-                { type: "address" },
-                { type: "uint256" },
-                { type: "bytes32" },
-                { type: "bytes32" },
-                { type: "uint256" },
-                { type: "uint256" },
-                { type: "uint256" },
-                { type: "uint256" },
-                { type: "uint256" },
-                { type: "bytes32" },
-            ],
-            [
-                userOp.sender,
-                userOp.nonce,
-                keccak256(userOp.initCode),
-                keccak256(userOp.callData),
-                userOp.callGasLimit,
-                userOp.verificationGasLimit,
-                userOp.preVerificationGas,
-                userOp.maxFeePerGas,
-                userOp.maxPriorityFeePerGas,
-                keccak256(userOp.paymasterAndData),
-            ]
-        );
-
-        const packedHash = keccak256(packed);
-
-        return keccak256(
-            encodeAbiParameters(
-                [{ type: "bytes32" }, { type: "address" }, { type: "uint256" }],
-                [packedHash, this.entryPointAddress, BigInt(this.chainConfig.chain.id)]
-            )
-        );
-    }
-
-    /**
-     * Sign a UserOperation with MetaMask
-     */
-    async signUserOperation(userOp: UserOperation): Promise<UserOperation> {
-        if (!this.owner) {
-            throw new Error("Not connected");
-        }
-
-        const userOpHash = this.getUserOpHash(userOp);
-
-        // Sign with MetaMask using personal_sign (EIP-191)
-        const signature = (await window.ethereum!.request({
-            method: "personal_sign",
-            params: [userOpHash, this.owner],
-        })) as Hex;
-
-        return {
-            ...userOp,
-            signature,
-        };
-    }
-
-    /**
-     * Send a signed UserOperation to the bundler
-     */
-    async sendUserOperation(userOp: UserOperation): Promise<Hash> {
-        return this.bundlerClient.sendUserOperation(userOp);
-    }
-
-    /**
-     * Wait for a UserOperation to be confirmed
-     */
-    async waitForUserOperation(
-        userOpHash: Hash,
-        timeout = 60000
-    ): Promise<UserOpReceipt> {
-        return this.bundlerClient.waitForUserOperation(userOpHash, timeout);
-    }
-
-
-    /**
-     * Request support for token approval (fund if needed)
-     */
-    async requestApprovalSupport(
-        token: Address,
-        spender: Address,
-        amount: bigint
-    ): Promise<ApprovalSupportResult> {
-        if (!this.owner) {
-            throw new Error("Not connected");
-        }
-        return this.bundlerClient.requestApprovalSupport(token, this.owner, spender, amount);
-    }
-
-    /**
-     * Deploy the Smart Account
-     */
     async deployAccount(): Promise<UserOpReceipt> {
-        const userOp = await this.buildDeployUserOperation();
-        const signed = await this.signUserOperation(userOp);
-        const hash = await this.sendUserOperation(signed);
-        return await this.waitForUserOperation(hash);
-    }
-
-    /**
-     * Send a single transaction via the Smart Account
-     * Abstracts: Build -> Sign -> Send -> Wait
-     */
-    async sendTransaction(
-        tx: { target: Address; value?: bigint; data?: Hex }
-    ): Promise<UserOpReceipt> {
-        return this.sendBatchTransaction([tx]);
-    }
-
-    /**
-     * Send multiple transactions via the Smart Account (Batched)
-     * Abstracts: Build -> Sign -> Send -> Wait
-     */
-    async sendBatchTransaction(
-        txs: { target: Address; value?: bigint; data?: Hex }[]
-    ): Promise<UserOpReceipt> {
-        // Normalize input (default value to 0, data to 0x)
-        const transactions = txs.map(tx => ({
-            target: tx.target,
-            value: tx.value ?? 0n,
-            data: tx.data ?? "0x"
-        }));
+        if (!this.owner || !this.smartAccountAddress) throw new Error("Not connected");
 
         try {
-            const userOp = await this.buildUserOperationBatch(transactions);
+            const userOp = await this.userOpBuilder.buildDeployUserOp(this.owner, this.smartAccountAddress);
             const signed = await this.signUserOperation(userOp);
             const hash = await this.sendUserOperation(signed);
             return await this.waitForUserOperation(hash);
@@ -487,49 +178,79 @@ export class AccountAbstraction {
         }
     }
 
-    /**
-     * Try to decode meaningful errors from RPC or Revert data
-     */
-    private decodeError(error: any): Error {
-        const msg = error?.message || "";
+    async sendTransaction(
+        tx: { target: Address; value?: bigint; data?: Hex }
+    ): Promise<UserOpReceipt> {
+        return this.sendBatchTransaction([tx]);
+    }
 
-        // 1. Try to find hex data in the error message (UserOp Revert)
-        // Look for 0x... in "data": "0x..." or in the message itself
-        const hexMatch = msg.match(/(0x[0-9a-fA-F]+)/);
+    async sendBatchTransaction(
+        txs: { target: Address; value?: bigint; data?: Hex }[]
+    ): Promise<UserOpReceipt> {
+        if (!this.owner || !this.smartAccountAddress) throw new Error("Not connected");
 
-        if (hexMatch) {
-            try {
-                // Try decoding as standard Error(string)
-                const decoded = decodeErrorResult({
-                    abi: [
-                        {
-                            inputs: [{ name: "message", type: "string" }],
-                            name: "Error",
-                            type: "error"
-                        },
-                        // Add common EntryPoint errors if known, but generic Reverts are most common
-                    ],
-                    data: hexMatch[0] as Hex
-                });
+        // Normalize
+        const transactions = txs.map(tx => ({
+            target: tx.target,
+            value: tx.value ?? 0n,
+            data: tx.data ?? "0x"
+        }));
 
-                if (decoded.errorName === "Error") {
-                    return new Error(`Smart Account Error: ${decoded.args[0]}`);
-                }
-            } catch (e) {
-                // Failed to decode, stick to original
-            }
+        try {
+            const userOp = await this.userOpBuilder.buildUserOperationBatch(
+                this.owner,
+                this.smartAccountAddress,
+                transactions
+            );
+            const signed = await this.signUserOperation(userOp);
+            const hash = await this.sendUserOperation(signed);
+            return await this.waitForUserOperation(hash);
+        } catch (error) {
+            throw this.decodeError(error);
+        }
+    }
+
+    async deposit(amount: bigint): Promise<Hash> {
+        if (!this.owner || !this.smartAccountAddress) throw new Error("Not connected");
+
+        const txHash = await window.ethereum!.request({
+            method: "eth_sendTransaction",
+            params: [{
+                from: this.owner,
+                to: this.smartAccountAddress,
+                value: "0x" + amount.toString(16)
+            }]
+        }) as Hash;
+        return txHash;
+    }
+
+    async transfer(
+        token: Address | string,
+        recipient: Address,
+        amount: bigint
+    ): Promise<UserOpReceipt> {
+        const tokenAddress = this.getTokenAddress(token);
+
+        // Native Transfer check
+        if (tokenAddress === "0x0000000000000000000000000000000000000000") {
+            return this.sendTransaction({
+                target: recipient,
+                value: amount,
+                data: "0x"
+            });
         }
 
-        // 2. Common EntryPoint error mapping (simplified)
-        if (msg.includes("AA21")) return new Error("Smart Account: Native transfer failed (ETH missing?)");
-        if (msg.includes("AA25")) return new Error("Smart Account: Invalid account nonce");
-
-        return error instanceof Error ? error : new Error(String(error));
+        // ERC-20
+        const data = this.tokenService.encodeTransfer(recipient, amount);
+        return this.sendTransaction({
+            target: tokenAddress,
+            value: 0n,
+            data
+        });
     }
 
     /**
-     * Approve a token for the Smart Account (EOA -> Token -> Smart Account)
-     * Checks for gas sponsorship (Relayer funding) if needed.
+     * Approve a token for the Smart Account
      */
     async approveToken(
         token: Address,
@@ -538,19 +259,10 @@ export class AccountAbstraction {
     ): Promise<Hash | "NOT_NEEDED"> {
         if (!this.owner) throw new Error("Not connected");
 
-        // 1. Check if we need funding
         const support = await this.requestApprovalSupport(token, spender, amount);
 
         if (support.type === "approve") {
-            // 2. Encode approve data
-            const data = encodeFunctionData({
-                abi: erc20Abi,
-                functionName: "approve",
-                args: [spender, amount]
-            });
-
-            // 3. Send transaction via Wallet (MetaMask)
-            // If funding was needed, the Relayer has already sent ETH to this.owner
+            const data = this.tokenService.encodeApprove(spender, amount);
             const txHash = await window.ethereum!.request({
                 method: "eth_sendTransaction",
                 params: [{
@@ -559,46 +271,77 @@ export class AccountAbstraction {
                     data,
                 }]
             }) as Hash;
-
             return txHash;
         }
 
-        if (support.type === "permit") {
-            throw new Error("Permit not yet supported in this SDK version");
-        }
-
+        if (support.type === "permit") throw new Error("Permit not yet supported");
         return "NOT_NEEDED";
     }
 
-    /**
-     * Transfer ERC-20 tokens from the Smart Account to a recipient
-     */
-    async transfer(
-        token: Address,
-        recipient: Address,
-        amount: bigint
-    ): Promise<UserOpReceipt> {
-        const data = encodeFunctionData({
-            abi: erc20Abi,
-            functionName: "transfer",
-            args: [recipient, amount]
-        });
+    // --- Core Bridge to Bundler/UserOp ---
 
-        return this.sendTransaction({
-            target: token,
-            value: 0n,
-            data
-        });
+    // Deprecated/Legacy but kept for compatibility or advanced usage?
+    // buildUserOperationBatch moved to internal usage mostly, but maybe exposed?
+    // If I remove them from public API, that is a BREAKING change if user used them.
+    // User requested "modularize", but usually expects same public API.
+    // I will expose them as simple delegates if needed, or assume they primarily use sendBatchTransaction.
+    // The previous implementation exposed `buildUserOperationBatch`.
+    async buildUserOperationBatch(transactions: any[]) {
+        if (!this.owner || !this.smartAccountAddress) throw new Error("Not connected");
+        return this.userOpBuilder.buildUserOperationBatch(this.owner, this.smartAccountAddress, transactions);
+    }
+
+    async signUserOperation(userOp: UserOperation): Promise<UserOperation> {
+        if (!this.owner) throw new Error("Not connected");
+
+        const userOpHash = this.userOpBuilder.getUserOpHash(userOp);
+
+        const signature = (await window.ethereum!.request({
+            method: "personal_sign",
+            params: [userOpHash, this.owner],
+        })) as Hex;
+
+        return { ...userOp, signature };
+    }
+
+    async sendUserOperation(userOp: UserOperation): Promise<Hash> {
+        return this.bundlerClient.sendUserOperation(userOp);
+    }
+
+    async waitForUserOperation(hash: Hash, timeout = 60000) {
+        return this.bundlerClient.waitForUserOperation(hash, timeout);
+    }
+
+    // Internal but exposed via BundlerClient originally
+    async requestApprovalSupport(token: Address, spender: Address, amount: bigint): Promise<ApprovalSupportResult> {
+        if (!this.owner) throw new Error("Not connected");
+        return this.bundlerClient.requestApprovalSupport(token, this.owner, spender, amount);
+    }
+
+    // Error Decoding (Private)
+    private decodeError(error: any): Error {
+        const msg = error?.message || "";
+        const hexMatch = msg.match(/(0x[0-9a-fA-F]+)/);
+
+        if (hexMatch) {
+            try {
+                const decoded = decodeErrorResult({
+                    abi: [{ inputs: [{ name: "message", type: "string" }], name: "Error", type: "error" }],
+                    data: hexMatch[0] as Hex
+                });
+                if (decoded.errorName === "Error") return new Error(`Smart Account Error: ${decoded.args[0]}`);
+            } catch (e) { /* ignore */ }
+        }
+
+        if (msg.includes("AA21")) return new Error("Smart Account: Native transfer failed (ETH missing?)");
+        if (msg.includes("AA25")) return new Error("Smart Account: Invalid account nonce");
+
+        return error instanceof Error ? error : new Error(String(error));
     }
 
     // Getters
-    getOwner(): Address | null {
-        return this.owner;
-    }
-
-    getSmartAccount(): Address | null {
-        return this.smartAccountAddress;
-    }
+    getOwner() { return this.owner; }
+    getSmartAccount() { return this.smartAccountAddress; }
 }
 
 // Global window types for MetaMask
