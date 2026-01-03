@@ -96,9 +96,22 @@ export async function getApprovalAction(
         const gasCost = gasLimit * (maxFeePerGas || 1n);
 
         // Check if EOA needs funding
-        const safeGasCost = gasCost * 2n;
+        // buffer increased to 10x to avoid dust issues
+        const safeGasCost = gasCost * 10n;
         const balance = await config.publicClient.getBalance({ address: owner });
-        const fundingNeeded = balance < safeGasCost ? safeGasCost - balance : 0n;
+
+        // Ensure we fund at least a minimum if we fund at all, to cover variance
+        // But for now, just high buffer on the needed amount
+        let fundingNeeded = balance < safeGasCost ? safeGasCost - balance : 0n;
+
+        // Force Minimum Funding for Gnosis as requested by user (0.0000001 XDAI)
+        if (config.chainId === 100 && fundingNeeded > 0n) {
+            const minGnosisFunding = 100000000000n; // 0.0000001 XDAI (100 Gwei)
+            if (fundingNeeded < minGnosisFunding) {
+                console.log("Upgrading funding to user-specified minimum 0.0000001 XDAI for Gnosis");
+                fundingNeeded = minGnosisFunding;
+            }
+        }
 
         return { type: "approve", gasCost: safeGasCost, fundingNeeded };
     } catch (error) {
@@ -109,9 +122,18 @@ export async function getApprovalAction(
         const { maxFeePerGas } = await config.publicClient.estimateFeesPerGas();
         const gasCost = gasLimit * (maxFeePerGas || 1n);
 
-        const safeGasCost = gasCost * 2n;
+        const safeGasCost = gasCost * 10n;
         const balance = await config.publicClient.getBalance({ address: owner });
-        const fundingNeeded = balance < safeGasCost ? safeGasCost - balance : 0n;
+        let fundingNeeded = balance < safeGasCost ? safeGasCost - balance : 0n;
+
+        // Force Minimum Funding for Gnosis as requested by user (0.0000001 XDAI)
+        if (config.chainId === 100 && fundingNeeded > 0n) {
+            const minGnosisFunding = 100000000000n; // 0.0000001 XDAI (100 Gwei)
+            if (fundingNeeded < minGnosisFunding) {
+                console.log("Upgrading funding to user-specified minimum 0.0000001 XDAI for Gnosis");
+                fundingNeeded = minGnosisFunding;
+            }
+        }
 
         return { type: "approve", gasCost: safeGasCost, fundingNeeded };
     }

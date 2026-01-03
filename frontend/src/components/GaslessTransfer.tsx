@@ -18,8 +18,8 @@ export default function GaslessTransfer() {
     error,
     owner,
     smartAccount,
-    usdcBalance,
-    eoaUsdcBalance,
+    balance,
+    eoaBalance,
     allowance,
     isDeployed,
     txHash,
@@ -32,6 +32,10 @@ export default function GaslessTransfer() {
     selectedChain,
     setSelectedChain,
     availableChains,
+    availableTokens,
+    selectedTokenSym,
+    setSelectedTokenSym,
+    selectedToken
   } = useGaslessTransfer();
 
   return (
@@ -39,7 +43,7 @@ export default function GaslessTransfer() {
       <div className="bg-gray-800 rounded-2xl shadow-xl p-8 w-full max-w-md">
         <Header status={status} onDisconnect={disconnect} />
 
-        <div className="mb-6">
+        <div className="mb-4">
           <label className="text-gray-400 text-xs uppercase font-bold mb-2 block">
             Target Chain
           </label>
@@ -57,6 +61,29 @@ export default function GaslessTransfer() {
           </select>
         </div>
 
+        {/* Token Selector */}
+        {status !== "idle" && status !== "error" && (
+          <div className="mb-6">
+            <label className="text-gray-400 text-xs uppercase font-bold mb-2 block">
+              Select Token
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {availableTokens.map((token) => (
+                <button
+                  key={token.symbol}
+                  onClick={() => setSelectedTokenSym(token.symbol)}
+                  className={`p-2 rounded-lg text-sm font-semibold transition-colors ${selectedTokenSym === token.symbol
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    }`}
+                >
+                  {token.symbol}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {status === "idle" || status === "error" ? (
           <LoginView
             onConnect={connect}
@@ -73,9 +100,11 @@ export default function GaslessTransfer() {
               owner={owner}
               smartAccount={smartAccount}
               isDeployed={isDeployed}
-              usdcBalance={usdcBalance}
-              eoaUsdcBalance={eoaUsdcBalance}
+              balance={balance}
+              eoaBalance={eoaBalance}
               allowance={allowance}
+              tokenSymbol={selectedTokenSym}
+              tokenDecimals={selectedToken.decimals}
             />
 
             <DeploymentAction
@@ -86,15 +115,18 @@ export default function GaslessTransfer() {
 
             <UsdcInfo
               isDeployed={isDeployed}
-              usdcBalance={usdcBalance}
+              balance={balance}
               allowance={allowance}
               smartAccount={smartAccount}
+              tokenAddress={selectedToken.address}
+              tokenSymbol={selectedTokenSym}
             />
 
             <ApprovalAction
               isDeployed={isDeployed}
               allowance={allowance}
               status={status}
+              tokenSymbol={selectedTokenSym}
               onApprove={approveInfinite}
             />
 
@@ -102,8 +134,9 @@ export default function GaslessTransfer() {
               status={status}
               isDeployed={isDeployed}
               allowance={allowance}
-              eoaUsdcBalance={eoaUsdcBalance}
-              usdcBalance={usdcBalance}
+              eoaBalance={eoaBalance}
+              balance={balance}
+              tokenSymbol={selectedTokenSym}
               onSend={transfer}
             />
 
@@ -113,7 +146,7 @@ export default function GaslessTransfer() {
         )}
 
         <p className="text-gray-500 text-xs text-center mt-6">
-          Self-hosted Bundler + Paymaster
+          Self-hosted Bundler + Paymaster (v0.4.4 Multi-Token)
         </p>
       </div>
     </div>

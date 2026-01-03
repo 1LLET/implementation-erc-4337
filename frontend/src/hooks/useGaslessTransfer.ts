@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { type Address, type Hash, formatUnits, encodeFunctionData, maxUint256 } from "viem";
 import { AccountAbstraction } from "@/lib/accountAbstraction";
-import { erc20Abi } from "@1llet.xyz/erc4337-gasless-sdk";
+import { erc20Abi, type Token, type ChainConfig } from "@1llet.xyz/erc4337-gasless-sdk";
 import { availableChains, defaultChainKey } from "@/config/chains";
 
 export type Status =
@@ -15,25 +15,31 @@ export type Status =
     | "success"
     | "error";
 
-
-
 export function useGaslessTransfer() {
     const [selectedChain, setSelectedChain] = useState<string>(defaultChainKey);
     const [aa, setAa] = useState(() => new AccountAbstraction(availableChains[defaultChainKey]));
     const [status, setStatus] = useState<Status>("idle");
     const [error, setError] = useState<string | null>(null);
 
+    // Token State
+    const [selectedTokenSym, setSelectedTokenSym] = useState<string>("USDC");
+
     // Account state
     const [owner, setOwner] = useState<Address | null>(null);
     const [smartAccount, setSmartAccount] = useState<Address | null>(null);
-    const [usdcBalance, setUsdcBalance] = useState<bigint>(0n);
-    const [eoaUsdcBalance, setEoaUsdcBalance] = useState<bigint>(0n);
+    const [balance, setBalance] = useState<bigint>(0n);
+    const [eoaBalance, setEoaBalance] = useState<bigint>(0n);
     const [allowance, setAllowance] = useState<bigint>(0n);
     const [isDeployed, setIsDeployed] = useState(false);
 
     // Transaction state
     const [userOpHash, setUserOpHash] = useState<Hash | null>(null);
     const [txHash, setTxHash] = useState<Hash | null>(null);
+
+    // Derived state
+    const chainConfig = availableChains[selectedChain];
+    const availableTokens = chainConfig.tokens;
+    const selectedToken = availableTokens.find(t => t.symbol === selectedTokenSym) || availableTokens[0];
 
     // Re-initialize AA when chain changes
     useEffect(() => {
@@ -43,32 +49,43 @@ export function useGaslessTransfer() {
         // Reset state
         setOwner(null);
         setSmartAccount(null);
-        setUsdcBalance(0n);
-        setEoaUsdcBalance(0n);
+        setBalance(0n);
+        setEoaBalance(0n);
         setAllowance(0n);
         setIsDeployed(false);
         setStatus("idle");
         setError(null);
+
+        // Default to first token if previous selection invalid
+        const hasToken = availableChains[selectedChain].tokens.some(t => t.symbol === selectedTokenSym);
+        if (!hasToken) {
+            setSelectedTokenSym(availableChains[selectedChain].tokens[0].symbol);
+        }
     }, [selectedChain]);
 
     // Refresh balance
     const refreshBalance = useCallback(async () => {
         if (smartAccount) {
             try {
-                const allow = await aa.getAllowance();
-                const smartAccountBal = await aa.getUsdcBalance();
-                const eoaBal = await aa.getEoaUsdcBalance();
-                const deployed = await aa.isAccountDeployed();
+                // Use generic SDK methods
+                const tokenAddr = selectedToken.address;
+
+                const [allow, bal, eoaBal, deployed] = await Promise.all([
+                    aa.getAllowance(tokenAddr).catch(() => 0n), // Catch error for Native tokens (allowance 0)
+                    aa.getBalance(tokenAddr),
+                    aa.getEoaBalance(tokenAddr),
+                    aa.isAccountDeployed()
+                ])
 
                 setAllowance(allow);
-                setUsdcBalance(smartAccountBal);
-                setEoaUsdcBalance(eoaBal);
+                setBalance(bal);
+                setEoaBalance(eoaBal);
                 setIsDeployed(deployed);
             } catch (err) {
                 console.error("Error refreshing balance:", err);
             }
         }
-    }, [aa, smartAccount]);
+    }, [aa, smartAccount, selectedToken]);
 
     // Auto-refresh balance
     useEffect(() => {
@@ -79,6 +96,13 @@ export function useGaslessTransfer() {
         }
     }, [status, refreshBalance]);
 
+    // Watch for token change to refresh immediately
+    useEffect(() => {
+        if (status === "connected") {
+            refreshBalance();
+        }
+    }, [selectedTokenSym]);
+
     const connect = async () => {
         setStatus("connecting");
         setError(null);
@@ -87,19 +111,8 @@ export function useGaslessTransfer() {
             setOwner(owner);
             setSmartAccount(smartAccount);
 
-            // Initial fetch will happen via the useEffect or we can force it here
-            const deployed = await aa.isAccountDeployed();
-
-            const bal = await aa.getUsdcBalance();
-            const eoaBal = await aa.getEoaUsdcBalance();
-
-            setUsdcBalance(bal);
-            setEoaUsdcBalance(eoaBal);
-            setIsDeployed(deployed);
-
-            // Update allowance too
-            const allow = await aa.getAllowance();
-            setAllowance(allow);
+            // Fetch initial state
+            await refreshBalance();
 
             setStatus("connected");
         } catch (err) {
@@ -124,8 +137,8 @@ export function useGaslessTransfer() {
         setStatus("idle");
         setOwner(null);
         setSmartAccount(null);
-        setUsdcBalance(0n);
-        setEoaUsdcBalance(0n);
+        setBalance(0n);
+        setEoaBalance(0n);
         setAllowance(0n);
         setIsDeployed(false);
         setUserOpHash(null);
@@ -141,7 +154,6 @@ export function useGaslessTransfer() {
 
         try {
             setStatus("building");
-            // Use SDK high-level method
             const receipt = await aa.deployAccount();
 
             setTxHash(receipt.receipt.transactionHash);
@@ -160,14 +172,12 @@ export function useGaslessTransfer() {
         if (!owner || !smartAccount) return;
 
         try {
-            const chainConfig = availableChains[selectedChain];
-            const usdcAddress = aa.getTokenAddress("USDC");
+            const tokenAddress = selectedToken.address;
 
             setStatus("signing");
             setError(null);
 
-            // Use SDK high-level method
-            const result = await aa.approveToken(usdcAddress, smartAccount);
+            const result = await aa.approveToken(tokenAddress, smartAccount);
 
             if (result === "NOT_NEEDED") {
                 console.log("Approval not needed");
@@ -184,8 +194,8 @@ export function useGaslessTransfer() {
             }
 
         } catch (err) {
-            console.error("Deposit error:", err);
-            setError(err instanceof Error ? err.message : "Deposit failed");
+            console.error("Approval error:", err);
+            setError(err instanceof Error ? err.message : "Approval failed");
             setStatus("error");
         }
     };
@@ -207,42 +217,74 @@ export function useGaslessTransfer() {
 
         try {
             setStatus("building");
-            const amountInUnits = BigInt(Math.floor(parseFloat(amount) * 1e6));
+            const decimals = selectedToken.decimals;
+            const amountInUnits = BigInt(Math.floor(parseFloat(amount) * (10 ** decimals)));
 
-            // Fee Configuration
+            // Fee Configuration (Always USDC for simplicity? Or native? Assuming USDC for now as per original code)
+            // Ideally commission should be in native or same token.
+            // Original code hardcoded USDC fee.
+            // CAUTION: If sending ETH, we can't pay fee in "transfer". We'd need to send native value.
+            // For now, I will keep the fee logic ONLY if token is USDC or I'll comment it out/skip it for non-USDC to avoid complexity?
+            // "implementa commission fee (0.01 USDC Batching)" was a previous requirement.
+            // If I transfer EURe, paying USDC fee implies I have USDC.
+            // Let's assume fee is only charged if transferring USDC for now to keep it safe, or generic 0.01 units? No that's dangerous.
+            // I'll skip fee for non-USDC tokens for this iteration to ensure safety, or check if token is USDC.
+
+            const isUSDC = selectedToken.symbol === "USDC";
             const feeAmount = 10000n; // 0.01 USDC
             const feeCollector = "0x01E048F8450E6ff1bf0e356eC78A4618D9219770";
 
-            const usdcAddress = aa.getTokenAddress("USDC");
-
             // Determine Source: Smart Account vs EOA
-            // Priority:
-            // 1. Smart Account (if it has enough balance)
-            // 2. EOA (if it has enough balance AND allowance)
-
             const isProd = process.env.NODE_ENV !== "development";
-            const totalNeeded = amountInUnits + (isProd ? feeAmount : 0n);
+            const needsFee = isProd && isUSDC;
+
+            const totalNeeded = amountInUnits + (needsFee ? feeAmount : 0n);
             const hasInfinite = allowance > (maxUint256 / 2n);
 
             let useEoa = false;
 
-            if (usdcBalance >= totalNeeded) {
+            if (balance >= totalNeeded) {
                 console.log("Using Smart Account Balance (Standard Transfer)");
                 useEoa = false;
-            } else if (hasInfinite && eoaUsdcBalance >= totalNeeded) {
+            } else if (hasInfinite && eoaBalance >= totalNeeded) {
                 console.log("Using EOA Balance (TransferFrom)");
                 useEoa = true;
+            }
+            // For Native Token (No allowance needed for EOA, but we can't "pull" ETH from EOA in a UserOp batch easily without value)
+            else if (selectedToken.address === "0x0000000000000000000000000000000000000000" && eoaBalance >= totalNeeded) {
+                // Native ETH EOA Fallback? "AccountAbstraction.transfer" handles this by sending simple transaction.
+                // But here we might want to batch? ETH cannot be batched from EOA in UserOp context easily (it's outside SA).
+                // We will rely on AA.transfer fallback which handles "Zero Address" = direct eth tx.
+                // So if using EOA for ETH, we just do aa.transfer (which does sendTransaction internally).
+                useEoa = true;
             } else {
-                throw new Error(`Insufficient funds. Needed: ${formatUnits(totalNeeded, 6)} USDC. Available: SA=${formatUnits(usdcBalance, 6)}, EOA=${formatUnits(eoaUsdcBalance, 6)}`);
+                throw new Error(`Insufficient funds. Needed: ${formatUnits(totalNeeded, decimals)} ${selectedToken.symbol}. Available: SA=${formatUnits(balance, decimals)}, EOA=${formatUnits(eoaBalance, decimals)}`);
             }
 
+            const tokenAddress = selectedToken.address;
+
+            // If it's a simple transfer (no fee batching needed OR generic token), we can use SDK aa.transfer?
+            // But we need to support EOA fallback "pull" (transferFrom). aa.transfer does "push" (transfer).
+            // So we must stick to manual construction for ERC20 EOA pull.
 
             const transactions = [];
 
             if (useEoa) {
-                // EOA -> Recipient
+                if (tokenAddress === "0x0000000000000000000000000000000000000000") {
+                    // Native ETH from EOA
+                    // Cannot batch this in UserOp for EOA source. Must be direct tx.
+                    // aa.transfer handles this.
+                    setStatus("signing");
+                    const receipt = await aa.transfer(tokenAddress, recipient as Address, amountInUnits);
+                    setTxHash(receipt.receipt.transactionHash);
+                    setStatus("success");
+                    refreshBalance();
+                    return;
+                }
+
+                // EOA -> Recipient (ERC20 transferFrom)
                 transactions.push({
-                    target: usdcAddress,
+                    target: tokenAddress,
                     value: 0n,
                     data: encodeFunctionData({
                         abi: erc20Abi,
@@ -251,10 +293,10 @@ export function useGaslessTransfer() {
                     })
                 });
 
-                // EOA -> Fee Collector
-                if (isProd) {
+                // EOA -> Fee Collector (Only if USDC and Prod)
+                if (needsFee) {
                     transactions.push({
-                        target: usdcAddress,
+                        target: tokenAddress,
                         value: 0n,
                         data: encodeFunctionData({
                             abi: erc20Abi,
@@ -266,7 +308,7 @@ export function useGaslessTransfer() {
             } else {
                 // Smart Account -> Recipient
                 transactions.push({
-                    target: usdcAddress,
+                    target: tokenAddress,
                     value: 0n,
                     data: encodeFunctionData({
                         abi: erc20Abi,
@@ -275,10 +317,10 @@ export function useGaslessTransfer() {
                     })
                 });
 
-                // Smart Account -> Fee Collector
-                if (isProd) {
+                // Smart Account -> Fee Collector (Only if USDC and Prod)
+                if (needsFee) {
                     transactions.push({
-                        target: usdcAddress,
+                        target: tokenAddress,
                         value: 0n,
                         data: encodeFunctionData({
                             abi: erc20Abi,
@@ -290,8 +332,6 @@ export function useGaslessTransfer() {
             }
 
             setStatus("signing");
-            // Use SDK v0.2.0 high-level batch method
-            // This handles build -> sign -> send -> wait AND error decoding
             const receipt = await aa.sendBatchTransaction(transactions);
 
             setTxHash(receipt.receipt.transactionHash);
@@ -310,8 +350,8 @@ export function useGaslessTransfer() {
         error,
         owner,
         smartAccount,
-        usdcBalance,
-        eoaUsdcBalance,
+        balance,
+        eoaBalance,
         allowance,
         isDeployed,
         userOpHash,
@@ -319,6 +359,13 @@ export function useGaslessTransfer() {
         selectedChain,
         availableChains,
         setSelectedChain,
+
+        // Token stuff
+        availableTokens,
+        selectedToken,
+        selectedTokenSym,
+        setSelectedTokenSym,
+
         connect,
         switchWallet,
         disconnect,

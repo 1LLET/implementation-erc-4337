@@ -148,19 +148,23 @@ export class AccountAbstraction {
         return this.tokenService.getTokenAddress(token);
     }
 
-    async getUsdcBalance(): Promise<bigint> {
+    async getBalance(token: string | Address): Promise<bigint> {
         if (!this.smartAccountAddress) throw new Error("Not connected");
-        return this.tokenService.getBalance("USDC", this.smartAccountAddress);
+        return this.tokenService.getBalance(token, this.smartAccountAddress);
     }
 
-    async getEoaUsdcBalance(): Promise<bigint> {
+    async getEoaBalance(token: string | Address): Promise<bigint> {
         if (!this.owner) throw new Error("Not connected");
-        return this.tokenService.getBalance("USDC", this.owner);
+        return this.tokenService.getBalance(token, this.owner);
     }
 
-    async getAllowance(): Promise<bigint> {
+    // Deprecated helpers maintained for compatibility
+    async getUsdcBalance(): Promise<bigint> { return this.getBalance("USDC"); }
+    async getEoaUsdcBalance(): Promise<bigint> { return this.getEoaBalance("USDC"); }
+
+    async getAllowance(token: string | Address = "USDC"): Promise<bigint> {
         if (!this.owner || !this.smartAccountAddress) throw new Error("Not connected");
-        return this.tokenService.getAllowance("USDC", this.owner, this.smartAccountAddress);
+        return this.tokenService.getAllowance(token, this.owner, this.smartAccountAddress);
     }
 
     // --- Transactions ---

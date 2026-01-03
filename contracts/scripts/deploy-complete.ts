@@ -37,8 +37,8 @@ async function main() {
 
 
 
-    // 3. Fund Paymaster (Only on Base as requested)
-    if (network.name === "base") {
+    // 3. Fund Paymaster (Base & Gnosis)
+    if (network.name === "base" || network.name === "gnosis") {
         console.log("\n3. Funding Paymaster (0.00002 ETH)...");
         try {
             const fundAmount = ethers.parseEther("0.00002");
@@ -57,7 +57,7 @@ async function main() {
             console.log("   ⚠️  Deposit failed:", err.message);
         }
     } else {
-        console.log("\n3. Funding Paymaster... SKIPPED (Not Base)");
+        console.log("\n3. Funding Paymaster... SKIPPED (Not Base/Gnosis)");
     }
 
     // 4. Update deployments.json

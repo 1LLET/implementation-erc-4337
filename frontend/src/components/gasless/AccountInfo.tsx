@@ -5,23 +5,27 @@ interface AccountInfoProps {
     owner: Address | null;
     smartAccount: Address | null;
     isDeployed: boolean;
-    usdcBalance: bigint;
-    eoaUsdcBalance: bigint;
+    balance: bigint;
+    eoaBalance: bigint;
     allowance: bigint;
+    tokenSymbol: string;
+    tokenDecimals: number;
 }
 
 export function AccountInfo({
     owner,
     smartAccount,
     isDeployed,
-    usdcBalance,
-    eoaUsdcBalance,
+    balance,
+    eoaBalance,
     allowance,
+    tokenSymbol,
+    tokenDecimals,
 }: AccountInfoProps) {
     const truncateAddress = (addr: string) =>
         `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
-    const formatUsdc = (amount: bigint) => formatUnits(amount, 6);
+    const formatToken = (amount: bigint) => formatUnits(amount, tokenDecimals);
 
     const hasInfinite = allowance > maxUint256 / 2n;
 
@@ -45,9 +49,9 @@ export function AccountInfo({
             </div>
 
             <div className="bg-gray-700 rounded-lg p-4">
-                <p className="text-gray-400 text-xs mb-1">USDC Balance</p>
+                <p className="text-gray-400 text-xs mb-1">{tokenSymbol} Balance</p>
                 <p className="text-xl font-semibold">
-                    {hasInfinite ? formatUsdc(eoaUsdcBalance) : formatUsdc(usdcBalance)} USDC
+                    {hasInfinite ? formatToken(eoaBalance) : formatToken(balance)} {tokenSymbol}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
                     {hasInfinite ? "(From your EOA)" : "(From Smart Account)"}

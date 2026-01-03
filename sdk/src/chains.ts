@@ -1,5 +1,5 @@
 import { type ChainConfig } from "./types";
-import { base, baseSepolia } from "viem/chains";
+import { base, baseSepolia, gnosis } from "viem/chains";
 
 export const BASE_MAINNET: ChainConfig = {
     chain: base,
@@ -18,6 +18,49 @@ export const BASE_MAINNET: ChainConfig = {
         },
         {
             symbol: "ETH",
+            decimals: 18,
+            address: "0x0000000000000000000000000000000000000000"
+        }
+    ]
+};
+
+export const GNOSIS_MAINNET: ChainConfig = {
+    chain: gnosis,
+    bundlerUrl: "http://localhost:3000/rpc?chain=gnosis", // Default to local bundler pattern
+
+    // Addresses
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    factoryAddress: "0xC8a2Fb1f2E686417A131E09be3320cb5431CcD90",
+    paymasterAddress: "0x4C36C70d68a7c26326711e8268bb163E3784fA96",
+
+    tokens: [
+        {
+            symbol: "USDC",
+            decimals: 6,
+            address: "0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0"
+        },
+        {
+            symbol: "USDT",
+            decimals: 6,
+            address: "0x4ECaBa5870353805a9F068101A40E0f32ed605C6"
+        },
+        {
+            symbol: "EURe",
+            decimals: 18,
+            address: "0x420CA0f9B9b604cE0fd9C18EF134C705e5Fa3430"
+        },
+        {
+            symbol: "GNO",
+            decimals: 18,
+            address: "0x9C58BAcC331c9aa871AFD802DB6379a98e80CEdb"
+        },
+        {
+            symbol: "WETH",
+            decimals: 18,
+            address: "0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1"
+        },
+        {
+            symbol: "XDAI",
             decimals: 18,
             address: "0x0000000000000000000000000000000000000000"
         }
@@ -50,5 +93,6 @@ export const BASE_SEPOLIA: ChainConfig = {
 // Map accessible by ChainID
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
     [base.id]: BASE_MAINNET,
-    [baseSepolia.id]: BASE_SEPOLIA
+    [baseSepolia.id]: BASE_SEPOLIA,
+    [gnosis.id]: GNOSIS_MAINNET
 };

@@ -6,6 +6,7 @@ interface ApprovalActionProps {
     isDeployed: boolean;
     allowance: bigint;
     status: Status;
+    tokenSymbol: string;
     onApprove: () => void;
 }
 
@@ -13,6 +14,7 @@ export function ApprovalAction({
     isDeployed,
     allowance,
     status,
+    tokenSymbol,
     onApprove,
 }: ApprovalActionProps) {
     const hasInfinite = allowance > maxUint256 / 2n;
@@ -23,7 +25,7 @@ export function ApprovalAction({
 
     return (
         <div className="bg-gray-700/50 rounded-lg p-4 mb-4 border border-gray-600">
-            <h3 className="text-gray-300 font-semibold mb-3">Enable USDC Spend</h3>
+            <h3 className="text-gray-300 font-semibold mb-3">Enable {tokenSymbol} Spend</h3>
             <div className="flex gap-2">
                 <button
                     onClick={onApprove}
@@ -34,7 +36,7 @@ export function ApprovalAction({
                 </button>
             </div>
             <p className="text-gray-500 text-xs mt-2">
-                Approves Smart Account to spend your USDC (Infinite). <br />
+                Approves Smart Account to spend your {tokenSymbol} (Infinite). <br />
                 (Gasless for you: Bundler refunds gas if needed)
             </p>
         </div>
