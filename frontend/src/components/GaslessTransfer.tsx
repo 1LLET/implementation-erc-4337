@@ -29,12 +29,33 @@ export default function GaslessTransfer() {
     deploy,
     approveInfinite,
     transfer,
+    selectedChain,
+    setSelectedChain,
+    availableChains,
   } = useGaslessTransfer();
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="bg-gray-800 rounded-2xl shadow-xl p-8 w-full max-w-md">
         <Header status={status} onDisconnect={disconnect} />
+
+        <div className="mb-6">
+          <label className="text-gray-400 text-xs uppercase font-bold mb-2 block">
+            Target Chain
+          </label>
+          <select
+            value={selectedChain}
+            onChange={(e) => setSelectedChain(e.target.value)}
+            className="w-full bg-gray-700 text-white p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={status !== "idle" && status !== "connected" && status !== "error"}
+          >
+            {Object.keys(availableChains).map((chainKey) => (
+              <option key={chainKey} value={chainKey}>
+                {availableChains[chainKey].chain.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {status === "idle" || status === "error" ? (
           <LoginView

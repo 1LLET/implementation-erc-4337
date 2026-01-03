@@ -1,6 +1,6 @@
 import { type Address, type Hash, formatEther } from "viem";
-import { config } from "../config.js";
-import { parseUserOp, getUserOpHash, type UserOperation } from "../utils/userOpHash.js";
+import { type Config } from "../config.js";
+import { parseUserOp, type UserOperation } from "../utils/userOpHash.js";
 import { validateUserOp } from "../services/validator.js";
 import { estimateUserOpGas, getNonce } from "../services/gasEstimator.js";
 import { executeUserOp, getUserOpReceipt, getUserOpByHash } from "../services/executor.js";
@@ -29,7 +29,8 @@ export interface JsonRpcResponse {
  * Validates and executes a UserOperation
  */
 async function handleSendUserOperation(
-  params: unknown[]
+  params: unknown[],
+  config: Config
 ): Promise<Hash> {
   if (params.length < 2) {
     throw { code: -32602, message: "Invalid params: expected [userOp, entryPoint]" };
@@ -46,7 +47,7 @@ async function handleSendUserOperation(
   const userOp = parseUserOp(rawUserOp);
 
   // Validate
-  const validation = await validateUserOp(userOp, entryPoint);
+  const validation = await validateUserOp(userOp, entryPoint, config);
   if (!validation.valid) {
     console.log("Validation failed:", validation.error);
     throw { code: -32602, message: validation.error };
@@ -55,7 +56,7 @@ async function handleSendUserOperation(
   console.log("Validation passed, executing...");
 
   // Execute
-  const userOpHash = await executeUserOp(userOp);
+  const userOpHash = await executeUserOp(userOp, config);
   return userOpHash;
 }
 
@@ -98,7 +99,8 @@ async function handleGetUserOperationReceipt(
  * Returns info about a UserOperation
  */
 async function handleGetUserOperationByHash(
-  params: unknown[]
+  params: unknown[],
+  config: Config
 ): Promise<unknown> {
   if (params.length < 1) {
     throw { code: -32602, message: "Invalid params: expected [userOpHash]" };
@@ -138,7 +140,7 @@ async function handleGetUserOperationByHash(
  * Handle eth_supportedEntryPoints
  * Returns list of supported EntryPoints
  */
-async function handleSupportedEntryPoints(): Promise<Address[]> {
+async function handleSupportedEntryPoints(config: Config): Promise<Address[]> {
   console.log("\n[eth_supportedEntryPoints]");
   return [config.entryPointAddress];
 }
@@ -148,7 +150,8 @@ async function handleSupportedEntryPoints(): Promise<Address[]> {
  * Estimates gas for a UserOperation
  */
 async function handleEstimateUserOperationGas(
-  params: unknown[]
+  params: unknown[],
+  config: Config
 ): Promise<unknown> {
   if (params.length < 2) {
     throw { code: -32602, message: "Invalid params: expected [userOp, entryPoint]" };
@@ -175,7 +178,7 @@ async function handleEstimateUserOperationGas(
     signature: (rawUserOp.signature || "0x") as `0x${string}`,
   };
 
-  const estimate = await estimateUserOpGas(partialUserOp);
+  const estimate = await estimateUserOpGas(partialUserOp, config);
 
   return {
     callGasLimit: "0x" + estimate.callGasLimit.toString(16),
@@ -189,7 +192,7 @@ async function handleEstimateUserOperationGas(
 /**
  * Handle eth_chainId
  */
-async function handleChainId(): Promise<string> {
+async function handleChainId(config: Config): Promise<string> {
   console.log("\n[eth_chainId]");
   return "0x" + config.chainId.toString(16);
 }
@@ -198,7 +201,8 @@ async function handleChainId(): Promise<string> {
  * Handle pm_requestApprovalSupport
  */
 async function handleRequestApprovalSupport(
-  params: unknown[]
+  params: unknown[],
+  config: Config
 ): Promise<unknown> {
   if (params.length < 4) {
     throw {
@@ -216,7 +220,7 @@ async function handleRequestApprovalSupport(
   console.log("Token:", token);
   console.log("Owner:", owner);
 
-  const result = await requestApprovalSupport(token, owner, spender, amount);
+  const result = await requestApprovalSupport(token, owner, spender, amount, config);
 
   // Serialize BigInts
   return {
@@ -230,7 +234,8 @@ async function handleRequestApprovalSupport(
  * Main RPC method dispatcher
  */
 export async function handleRpcMethod(
-  request: JsonRpcRequest
+  request: JsonRpcRequest,
+  config: Config
 ): Promise<JsonRpcResponse> {
   const { id, method, params } = request;
 
@@ -239,25 +244,25 @@ export async function handleRpcMethod(
 
     switch (method) {
       case "eth_sendUserOperation":
-        result = await handleSendUserOperation(params);
+        result = await handleSendUserOperation(params, config);
         break;
       case "eth_getUserOperationReceipt":
         result = await handleGetUserOperationReceipt(params);
         break;
       case "eth_getUserOperationByHash":
-        result = await handleGetUserOperationByHash(params);
+        result = await handleGetUserOperationByHash(params, config);
         break;
       case "eth_supportedEntryPoints":
-        result = await handleSupportedEntryPoints();
+        result = await handleSupportedEntryPoints(config);
         break;
       case "eth_estimateUserOperationGas":
-        result = await handleEstimateUserOperationGas(params);
+        result = await handleEstimateUserOperationGas(params, config);
         break;
       case "eth_chainId":
-        result = await handleChainId();
+        result = await handleChainId(config);
         break;
       case "pm_requestApprovalSupport":
-        result = await handleRequestApprovalSupport(params);
+        result = await handleRequestApprovalSupport(params, config);
         break;
       default:
         throw { code: -32601, message: `Method not found: ${method}` };

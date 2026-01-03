@@ -1,5 +1,5 @@
 import { type Address, encodeFunctionData, parseGwei } from "viem";
-import { publicClient, config } from "../config.js";
+import { type Config } from "../config.js";
 import { type UserOperation } from "../utils/userOpHash.js";
 import { entryPointAbi, factoryAbi, smartAccountAbi } from "../utils/abis.js";
 
@@ -15,10 +15,11 @@ export interface GasEstimate {
  * Estimate gas for a UserOperation
  */
 export async function estimateUserOpGas(
-  userOp: Partial<UserOperation>
+  userOp: Partial<UserOperation>,
+  config: Config
 ): Promise<GasEstimate> {
   // Get current gas prices
-  const feeData = await publicClient.estimateFeesPerGas();
+  const feeData = await config.publicClient.estimateFeesPerGas();
   const maxFeePerGas = feeData.maxFeePerGas || parseGwei("1");
   const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || parseGwei("0.1");
 
@@ -41,7 +42,7 @@ export async function estimateUserOpGas(
   if (userOp.callData && userOp.callData !== "0x" && userOp.sender) {
     try {
       // Try to estimate the actual execution gas
-      const estimatedGas = await publicClient.estimateGas({
+      const estimatedGas = await config.publicClient.estimateGas({
         to: userOp.sender,
         data: userOp.callData,
         account: config.entryPointAddress,
@@ -102,7 +103,7 @@ function calculatePreVerificationGas(userOp: Partial<UserOperation>): bigint {
 /**
  * Build initCode for deploying a new account
  */
-export function buildInitCode(owner: Address, salt: bigint = 0n): `0x${string}` {
+export function buildInitCode(owner: Address, config: Config, salt: bigint = 0n): `0x${string}` {
   const createAccountData = encodeFunctionData({
     abi: factoryAbi,
     functionName: "createAccount",
@@ -130,9 +131,9 @@ export function buildTransferCallData(
 /**
  * Get the nonce for an account from EntryPoint
  */
-export async function getNonce(sender: Address): Promise<bigint> {
+export async function getNonce(sender: Address, config: Config): Promise<bigint> {
   try {
-    return await publicClient.readContract({
+    return await config.publicClient.readContract({
       address: config.entryPointAddress,
       abi: entryPointAbi,
       functionName: "getNonce",

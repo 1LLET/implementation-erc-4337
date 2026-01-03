@@ -1,0 +1,7 @@
+{
+  "base": {
+    "SponsorPaymaster": "0x1e13Eb16C565E3f3FDe49A011755e50410bb1F95",
+    "SmartAccountFactory": "0xe2584152891E4769025807DEa0cD611F135aDC68",
+    "EntryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+  }
+}

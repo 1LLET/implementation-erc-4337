@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { type Address, type Hash, formatUnits, encodeFunctionData, maxUint256 } from "viem";
 import { AccountAbstraction } from "@/lib/accountAbstraction";
-import { config, erc20Abi } from "@/config/contracts";
+import { erc20Abi } from "@/config/contracts";
+import { availableChains, defaultChainKey } from "@/config/chains";
 
 export type Status =
     | "idle"
@@ -15,7 +16,8 @@ export type Status =
     | "error";
 
 export function useGaslessTransfer() {
-    const [aa] = useState(() => new AccountAbstraction());
+    const [selectedChain, setSelectedChain] = useState<string>(defaultChainKey);
+    const [aa, setAa] = useState(() => new AccountAbstraction(availableChains[defaultChainKey]));
     const [status, setStatus] = useState<Status>("idle");
     const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +32,22 @@ export function useGaslessTransfer() {
     // Transaction state
     const [userOpHash, setUserOpHash] = useState<Hash | null>(null);
     const [txHash, setTxHash] = useState<Hash | null>(null);
+
+    // Re-initialize AA when chain changes
+    useEffect(() => {
+        const newAA = new AccountAbstraction(availableChains[selectedChain]);
+        setAa(newAA);
+
+        // Reset state
+        setOwner(null);
+        setSmartAccount(null);
+        setUsdcBalance(0n);
+        setEoaUsdcBalance(0n);
+        setAllowance(0n);
+        setIsDeployed(false);
+        setStatus("idle");
+        setError(null);
+    }, [selectedChain]);
 
     // Refresh balance
     const refreshBalance = useCallback(async () => {
@@ -68,19 +86,9 @@ export function useGaslessTransfer() {
             setSmartAccount(smartAccount);
 
             // Initial fetch will happen via the useEffect or we can force it here
-            // But we need to set connected first for the useEffect to trigger? 
-            // Actually let's fetch once to render immediately
-            const deployed = await aa.isAccountDeployed(); // Need address first inside AA class
-            // The AA class stores state, so calling connect() initializes it.
-
-            // We can rely on refreshBalance but we need to wait for state updates?
-            // Let's just set status connected and let the effect handle it or do it manually.
-            // Doing it manually to avoid "flash" of empty data
+            const deployed = await aa.isAccountDeployed();
 
             const bal = await aa.getUsdcBalance();
-            // Note: In the original code we did individual fetches. 
-            // Let's just set status connected, the effect will fire. 
-            // but for immediate feedback:
             const eoaBal = await aa.getEoaUsdcBalance();
 
             setUsdcBalance(bal);
@@ -166,9 +174,10 @@ export function useGaslessTransfer() {
             setError(null);
 
             const amountUnits = maxUint256;
+            const chainConfig = availableChains[selectedChain];
 
             const support = await aa.requestApprovalSupport(
-                config.usdcAddress,
+                chainConfig.usdcAddress,
                 smartAccount,
                 amountUnits
             );
@@ -190,7 +199,7 @@ export function useGaslessTransfer() {
                     method: "eth_sendTransaction",
                     params: [{
                         from: owner,
-                        to: config.usdcAddress,
+                        to: chainConfig.usdcAddress,
                         data,
                     }]
                 }) as Hash;
@@ -242,6 +251,8 @@ export function useGaslessTransfer() {
             const feeAmount = 10000n; // 0.01 USDC
             const feeCollector = "0x01E048F8450E6ff1bf0e356eC78A4618D9219770";
 
+            const chainConfig = availableChains[selectedChain];
+
             let userOp;
             const hasInfinite = allowance > (maxUint256 / 2n);
 
@@ -261,8 +272,8 @@ export function useGaslessTransfer() {
                 });
 
                 userOp = await aa.buildUserOperationBatch([
-                    { target: config.usdcAddress, value: 0n, data: transferData },
-                    { target: config.usdcAddress, value: 0n, data: feeData }
+                    { target: chainConfig.usdcAddress, value: 0n, data: transferData },
+                    { target: chainConfig.usdcAddress, value: 0n, data: feeData }
                 ]);
 
             } else {
@@ -281,8 +292,8 @@ export function useGaslessTransfer() {
                 });
 
                 userOp = await aa.buildUserOperationBatch([
-                    { target: config.usdcAddress, value: 0n, data: transferData },
-                    { target: config.usdcAddress, value: 0n, data: feeData }
+                    { target: chainConfig.usdcAddress, value: 0n, data: transferData },
+                    { target: chainConfig.usdcAddress, value: 0n, data: feeData }
                 ]);
             }
 
@@ -321,6 +332,9 @@ export function useGaslessTransfer() {
         isDeployed,
         userOpHash,
         txHash,
+        selectedChain,
+        availableChains,
+        setSelectedChain,
         connect,
         switchWallet,
         disconnect,

@@ -15,7 +15,8 @@
     "@types/node": "^20.10.0",
     "dotenv": "^16.3.1",
     "hardhat": "^2.19.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "viem": "^2.43.4"
   },
   "dependencies": {
     "@account-abstraction/contracts": "^0.6.0",

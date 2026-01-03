@@ -4,7 +4,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { config } from "../config.js";
+
 
 export interface UserOperation {
   sender: Address;
@@ -55,7 +55,11 @@ export function packUserOp(userOp: UserOperation): Hex {
 /**
  * Calculate the UserOperation hash according to ERC-4337 spec
  */
-export function getUserOpHash(userOp: UserOperation): Hex {
+export function getUserOpHash(
+  userOp: UserOperation,
+  entryPointAddress: Address,
+  chainId: number
+): Hex {
   const packed = packUserOp(userOp);
   const packedHash = keccak256(packed);
 
@@ -63,7 +67,7 @@ export function getUserOpHash(userOp: UserOperation): Hex {
   return keccak256(
     encodeAbiParameters(
       [{ type: "bytes32" }, { type: "address" }, { type: "uint256" }],
-      [packedHash, config.entryPointAddress, BigInt(config.chainId)]
+      [packedHash, entryPointAddress, BigInt(chainId)]
     )
   );
 }

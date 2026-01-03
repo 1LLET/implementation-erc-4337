@@ -7,15 +7,15 @@ import {
   type Address,
   type Hash,
   type Hex,
+  type PublicClient
 } from "viem";
-import { baseSepolia } from "viem/chains";
 import {
-  config,
   factoryAbi,
   entryPointAbi,
   smartAccountAbi,
   erc20Abi,
 } from "@/config/contracts";
+import { type ChainConfig } from "@/config/chains";
 
 // Types
 export interface UserOperation {
@@ -51,18 +51,22 @@ export interface UserOpReceipt {
   };
 }
 
-// Public client for reading blockchain state
-const publicClient = createPublicClient({
-  chain: baseSepolia,
-  transport: http(config.rpcUrl),
-});
-
 /**
  * AccountAbstraction class for interacting with ERC-4337
  */
 export class AccountAbstraction {
   private owner: Address | null = null;
   private smartAccountAddress: Address | null = null;
+  private chainConfig: ChainConfig;
+  private publicClient: PublicClient;
+
+  constructor(chainConfig: ChainConfig) {
+    this.chainConfig = chainConfig;
+    this.publicClient = createPublicClient({
+      chain: chainConfig.chain,
+      transport: http(chainConfig.rpcUrl),
+    });
+  }
 
   /**
    * Connect to MetaMask and get the owner address
@@ -86,12 +90,14 @@ export class AccountAbstraction {
       method: "eth_chainId",
     })) as string;
 
-    if (parseInt(chainId, 16) !== config.chainId) {
-      // Switch to Base Sepolia
+    const targetChainId = this.chainConfig.chain.id;
+
+    if (parseInt(chainId, 16) !== targetChainId) {
+      // Switch to configured chain
       try {
         await window.ethereum.request({
           method: "wallet_switchEthereumChain",
-          params: [{ chainId: "0x" + config.chainId.toString(16) }],
+          params: [{ chainId: "0x" + targetChainId.toString(16) }],
         });
       } catch (switchError: unknown) {
         const error = switchError as { code?: number };
@@ -101,15 +107,13 @@ export class AccountAbstraction {
             method: "wallet_addEthereumChain",
             params: [
               {
-                chainId: "0x" + config.chainId.toString(16),
-                chainName: "Base Sepolia",
-                nativeCurrency: {
-                  name: "ETH",
-                  symbol: "ETH",
-                  decimals: 18,
-                },
-                rpcUrls: ["https://sepolia.base.org"],
-                blockExplorerUrls: ["https://sepolia.basescan.org"],
+                chainId: "0x" + targetChainId.toString(16),
+                chainName: this.chainConfig.chain.name,
+                nativeCurrency: this.chainConfig.chain.nativeCurrency,
+                rpcUrls: [this.chainConfig.rpcUrl],
+                blockExplorerUrls: this.chainConfig.chain.blockExplorers?.default?.url
+                  ? [this.chainConfig.chain.blockExplorers.default.url]
+                  : [],
               },
             ],
           });
@@ -132,8 +136,8 @@ export class AccountAbstraction {
    * Get the Smart Account address for an owner (counterfactual)
    */
   async getSmartAccountAddress(owner: Address): Promise<Address> {
-    const address = await publicClient.readContract({
-      address: config.factoryAddress,
+    const address = await this.publicClient.readContract({
+      address: this.chainConfig.factoryAddress,
       abi: factoryAbi,
       functionName: "getAccountAddress",
       args: [owner, 0n], // salt = 0
@@ -149,7 +153,7 @@ export class AccountAbstraction {
       throw new Error("Not connected");
     }
 
-    const code = await publicClient.getCode({
+    const code = await this.publicClient.getCode({
       address: this.smartAccountAddress,
     });
     return code !== undefined && code !== "0x";
@@ -164,8 +168,8 @@ export class AccountAbstraction {
       throw new Error("Not connected");
     }
 
-    return await publicClient.readContract({
-      address: config.usdcAddress,
+    return await this.publicClient.readContract({
+      address: this.chainConfig.usdcAddress,
       abi: erc20Abi,
       functionName: "balanceOf",
       args: [this.smartAccountAddress],
@@ -181,8 +185,8 @@ export class AccountAbstraction {
       throw new Error("Not connected");
     }
 
-    return await publicClient.readContract({
-      address: config.usdcAddress,
+    return await this.publicClient.readContract({
+      address: this.chainConfig.usdcAddress,
       abi: erc20Abi,
       functionName: "balanceOf",
       args: [this.owner],
@@ -197,8 +201,8 @@ export class AccountAbstraction {
       throw new Error("Not connected");
     }
 
-    return await publicClient.readContract({
-      address: config.usdcAddress,
+    return await this.publicClient.readContract({
+      address: this.chainConfig.usdcAddress,
       abi: erc20Abi,
       functionName: "allowance",
       args: [this.owner, this.smartAccountAddress],
@@ -213,8 +217,8 @@ export class AccountAbstraction {
       throw new Error("Not connected");
     }
 
-    return await publicClient.readContract({
-      address: config.entryPointAddress,
+    return await this.publicClient.readContract({
+      address: this.chainConfig.entryPointAddress,
       abi: entryPointAbi,
       functionName: "getNonce",
       args: [this.smartAccountAddress, 0n],
@@ -235,7 +239,7 @@ export class AccountAbstraction {
       args: [this.owner, 0n],
     });
 
-    return `${config.factoryAddress}${createAccountData.slice(2)}` as Hex;
+    return `${this.chainConfig.factoryAddress}${createAccountData.slice(2)}` as Hex;
   }
 
 
@@ -243,7 +247,7 @@ export class AccountAbstraction {
    * Estimate gas for a UserOperation
    */
   async estimateGas(userOp: Partial<UserOperation>): Promise<GasEstimate> {
-    const response = await fetch(config.bundlerUrl, {
+    const response = await fetch(this.chainConfig.bundlerUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -259,7 +263,7 @@ export class AccountAbstraction {
             paymasterAndData: userOp.paymasterAndData || "0x",
             signature: "0x",
           },
-          config.entryPointAddress,
+          this.chainConfig.entryPointAddress,
         ],
       }),
     });
@@ -306,7 +310,7 @@ export class AccountAbstraction {
       nonce,
       initCode: initCode as Hex,
       callData,
-      paymasterAndData: config.paymasterAddress as Hex,
+      paymasterAndData: this.chainConfig.paymasterAddress as Hex,
     });
 
     return {
@@ -319,7 +323,7 @@ export class AccountAbstraction {
       preVerificationGas: BigInt(gasEstimate.preVerificationGas),
       maxFeePerGas: BigInt(gasEstimate.maxFeePerGas),
       maxPriorityFeePerGas: BigInt(gasEstimate.maxPriorityFeePerGas),
-      paymasterAndData: config.paymasterAddress as Hex,
+      paymasterAndData: this.chainConfig.paymasterAddress as Hex,
       signature: "0x",
     };
   }
@@ -347,7 +351,7 @@ export class AccountAbstraction {
       nonce,
       initCode: initCode as Hex,
       callData,
-      paymasterAndData: config.paymasterAddress as Hex,
+      paymasterAndData: this.chainConfig.paymasterAddress as Hex,
     });
 
     return {
@@ -360,7 +364,7 @@ export class AccountAbstraction {
       preVerificationGas: BigInt(gasEstimate.preVerificationGas),
       maxFeePerGas: BigInt(gasEstimate.maxFeePerGas),
       maxPriorityFeePerGas: BigInt(gasEstimate.maxPriorityFeePerGas),
-      paymasterAndData: config.paymasterAddress as Hex,
+      paymasterAndData: this.chainConfig.paymasterAddress as Hex,
       signature: "0x",
     };
   }
@@ -401,7 +405,7 @@ export class AccountAbstraction {
     return keccak256(
       encodeAbiParameters(
         [{ type: "bytes32" }, { type: "address" }, { type: "uint256" }],
-        [packedHash, config.entryPointAddress, BigInt(config.chainId)]
+        [packedHash, this.chainConfig.entryPointAddress, BigInt(this.chainConfig.chain.id)]
       )
     );
   }
@@ -432,7 +436,7 @@ export class AccountAbstraction {
    * Send a signed UserOperation to the bundler
    */
   async sendUserOperation(userOp: UserOperation): Promise<Hash> {
-    const response = await fetch(config.bundlerUrl, {
+    const response = await fetch(this.chainConfig.bundlerUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -453,7 +457,7 @@ export class AccountAbstraction {
             paymasterAndData: userOp.paymasterAndData,
             signature: userOp.signature,
           },
-          config.entryPointAddress,
+          this.chainConfig.entryPointAddress,
         ],
       }),
     });
@@ -476,7 +480,7 @@ export class AccountAbstraction {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
-      const response = await fetch(config.bundlerUrl, {
+      const response = await fetch(this.chainConfig.bundlerUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -517,7 +521,7 @@ export class AccountAbstraction {
       throw new Error("Not connected");
     }
 
-    const response = await fetch(config.bundlerUrl, {
+    const response = await fetch(this.chainConfig.bundlerUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

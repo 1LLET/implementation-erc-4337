@@ -1,5 +1,5 @@
 import { type Hash, type Address, decodeEventLog } from "viem";
-import { publicClient, walletClient, bundlerAccount, config } from "../config.js";
+import { type Config } from "../config.js";
 import { type UserOperation, userOpToTuple, getUserOpHash } from "../utils/userOpHash.js";
 import { entryPointAbi } from "../utils/abis.js";
 
@@ -22,8 +22,8 @@ const pendingOps = new Map<Hash, UserOperation>();
 /**
  * Execute a UserOperation by sending it to the EntryPoint
  */
-export async function executeUserOp(userOp: UserOperation): Promise<Hash> {
-  const userOpHash = getUserOpHash(userOp);
+export async function executeUserOp(userOp: UserOperation, config: Config): Promise<Hash> {
+  const userOpHash = getUserOpHash(userOp, config.entryPointAddress, config.chainId);
 
   console.log("\n=== Executing UserOperation ===");
   console.log("UserOpHash:", userOpHash);
@@ -38,29 +38,31 @@ export async function executeUserOp(userOp: UserOperation): Promise<Hash> {
   try {
     // Simulate the handleOps call first
     console.log("\nSimulating handleOps...");
-    await publicClient.simulateContract({
+    await config.publicClient.simulateContract({
       address: config.entryPointAddress,
       abi: entryPointAbi,
       functionName: "handleOps",
-      args: [[userOpToTuple(userOp)], bundlerAccount.address],
-      account: bundlerAccount,
+      args: [[userOpToTuple(userOp)], config.walletClient.account!.address],
+      account: config.walletClient.account!,
     });
     console.log("Simulation successful!");
 
     // Execute the transaction
     console.log("\nSending transaction to EntryPoint...");
-    const txHash = await walletClient.writeContract({
+    const txHash = await config.walletClient.writeContract({
       address: config.entryPointAddress,
       abi: entryPointAbi,
       functionName: "handleOps",
-      args: [[userOpToTuple(userOp)], bundlerAccount.address],
+      args: [[userOpToTuple(userOp)], config.walletClient.account!.address],
+      chain: config.chain, // Explicitly pass chain to avoid mismatch
+      account: config.walletClient.account!,
     });
 
     console.log("Transaction hash:", txHash);
 
     // Wait for the transaction to be mined
     console.log("Waiting for confirmation...");
-    const receipt = await publicClient.waitForTransactionReceipt({
+    const receipt = await config.publicClient.waitForTransactionReceipt({
       hash: txHash,
     });
 

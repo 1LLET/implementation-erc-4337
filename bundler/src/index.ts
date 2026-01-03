@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { config, bundlerAccount, publicClient } from "./config.js";
+import { getChainConfig, type Config } from "./config.js";
 import { rpcRouter } from "./rpc/handler.js";
 import { formatEther } from "viem";
 
@@ -14,12 +14,23 @@ app.use(express.json());
 app.use("/rpc", rpcRouter);
 
 // Root endpoint
-app.get("/", (_req, res) => {
+app.get("/", (req, res) => {
+  // Allow querying specific chain info via ?chain=xxx
+  const chainName = (req.query.chain as string) || "baseSepolia";
+  let config: Config | null = null;
+
+  try {
+    config = getChainConfig(chainName);
+  } catch (e) {
+    // If default chain fails, just returning generic info is fine or error
+  }
+
   res.json({
     name: "ERC-4337 Self-Hosted Bundler",
     version: "1.0.0",
-    chainId: config.chainId,
-    entryPoint: config.entryPointAddress,
+    chain: config ? config.chain.name : "Dynamic",
+    chainId: config ? config.chainId : undefined,
+    entryPoint: config ? config.entryPointAddress : undefined,
     endpoints: {
       rpc: "/rpc",
       health: "/rpc/health",
@@ -37,34 +48,48 @@ app.get("/", (_req, res) => {
 
 // Start server
 async function start() {
+  const PORT = process.env.PORT || 3000;
+
   console.log("\n====================================");
   console.log("ERC-4337 Self-Hosted Bundler");
   console.log("====================================\n");
 
-  // Check bundler balance
-  const balance = await publicClient.getBalance({
-    address: bundlerAccount.address,
-  });
+  // Try to load a default chain to show some info, but don't crash if missing
+  try {
+    const defaultChain = "baseSepolia";
+    const config = getChainConfig(defaultChain);
 
-  console.log("Configuration:");
-  console.log("  Chain ID:", config.chainId);
-  console.log("  RPC URL:", config.rpcUrl);
-  console.log("  EntryPoint:", config.entryPointAddress);
-  console.log("  Factory:", config.factoryAddress);
-  console.log("  Paymaster:", config.paymasterAddress);
-  console.log("\nBundler Wallet:");
-  console.log("  Address:", bundlerAccount.address);
-  console.log("  Balance:", formatEther(balance), "ETH");
+    // Check bundler balance for default chain
+    const address = config.walletClient.account?.address;
 
-  if (balance < BigInt(1e16)) {
-    console.warn("\n⚠️  WARNING: Bundler wallet balance is low!");
-    console.warn("   The bundler needs ETH to pay for transaction gas.");
-    console.warn("   Please fund:", bundlerAccount.address);
+    if (!address) {
+      console.warn("Could not derive bundler address for balance check");
+    } else {
+      const balanceVal = await config.publicClient.getBalance({
+        address,
+      });
+
+      console.log(`Default Chain (${defaultChain}) Configuration:`);
+      console.log("  Chain ID:", config.chainId);
+      console.log("  RPC URL:", config.rpcUrl);
+      console.log("  EntryPoint:", config.entryPointAddress);
+      console.log("  Factory:", config.factoryAddress);
+      console.log("  Paymaster:", config.paymasterAddress);
+      console.log("\nBundler Wallet:");
+      console.log("  Address:", address);
+      console.log("  Balance:", formatEther(balanceVal), "ETH");
+
+      if (balanceVal < BigInt(1e16)) {
+        console.warn("\n⚠️  WARNING: Bundler wallet balance is low on default chain!");
+      }
+    }
+  } catch (e) {
+    console.log("Could not load default chain 'baseSepolia' configuration for startup log. Ignoring.");
   }
 
-  app.listen(config.port, () => {
-    console.log(`\n🚀 Bundler running at http://localhost:${config.port}`);
-    console.log(`   RPC endpoint: http://localhost:${config.port}/rpc`);
+  app.listen(PORT, () => {
+    console.log(`\n🚀 Bundler running at http://localhost:${PORT}`);
+    console.log(`   RPC endpoint: http://localhost:${PORT}/rpc`);
     console.log("\n====================================\n");
   });
 }

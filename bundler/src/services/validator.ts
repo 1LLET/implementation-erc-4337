@@ -1,5 +1,5 @@
 import { type Address, type Hex, isAddress, isHex } from "viem";
-import { publicClient, config } from "../config.js";
+import { type Config } from "../config.js";
 import { type UserOperation } from "../utils/userOpHash.js";
 import { entryPointAbi, paymasterAbi } from "../utils/abis.js";
 
@@ -13,7 +13,8 @@ export interface ValidationResult {
  */
 export async function validateUserOp(
   userOp: UserOperation,
-  entryPoint: Address
+  entryPoint: Address,
+  config: Config
 ): Promise<ValidationResult> {
   // 1. Validate entryPoint address
   if (entryPoint.toLowerCase() !== config.entryPointAddress.toLowerCase()) {
@@ -60,7 +61,7 @@ export async function validateUserOp(
   }
 
   // 5. Check if account needs to be deployed
-  const senderCode = await publicClient.getCode({ address: userOp.sender });
+  const senderCode = await config.publicClient.getCode({ address: userOp.sender });
   const isDeployed = senderCode && senderCode !== "0x";
 
   if (!isDeployed && userOp.initCode === "0x") {
@@ -78,7 +79,7 @@ export async function validateUserOp(
   }
 
   // 6. Validate nonce
-  const currentNonce = await publicClient.readContract({
+  const currentNonce = await config.publicClient.readContract({
     address: config.entryPointAddress,
     abi: entryPointAbi,
     functionName: "getNonce",
@@ -104,7 +105,7 @@ export async function validateUserOp(
     }
 
     // Check paymaster deposit
-    const paymasterDeposit = await publicClient.readContract({
+    const paymasterDeposit = await config.publicClient.readContract({
       address: config.paymasterAddress,
       abi: paymasterAbi,
       functionName: "getDeposit",

@@ -1,12 +1,10 @@
 import {
     type Address,
     type Hex,
-    encodeFunctionData,
-    parseEther,
     formatEther,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { publicClient, walletClient, bundlerAccount } from "../config.js";
+import { type Config } from "../config.js";
 import { erc20Abi } from "../utils/abis.js";
 
 export type ApprovalType = "permit" | "approve" | "none";
@@ -22,11 +20,12 @@ export interface ApprovalAction {
  */
 export async function checkPermitSupport(
     token: Address,
-    owner: Address
+    owner: Address,
+    config: Config
 ): Promise<boolean> {
     try {
         // Try to read DOMAIN_SEPARATOR (EIP-2612)
-        await publicClient.readContract({
+        await config.publicClient.readContract({
             address: token,
             abi: erc20Abi,
             functionName: "DOMAIN_SEPARATOR",
@@ -35,7 +34,7 @@ export async function checkPermitSupport(
     } catch {
         try {
             // Fallback: try to read nonces
-            await publicClient.readContract({
+            await config.publicClient.readContract({
                 address: token,
                 abi: erc20Abi,
                 functionName: "nonces",
@@ -56,10 +55,11 @@ export async function getApprovalAction(
     token: Address,
     owner: Address,
     spender: Address,
-    amount: bigint
+    amount: bigint,
+    config: Config
 ): Promise<ApprovalAction> {
     // 1. Check current allowance
-    const allowance = await publicClient.readContract({
+    const allowance = await config.publicClient.readContract({
         address: token,
         abi: erc20Abi,
         functionName: "allowance",
@@ -74,7 +74,7 @@ export async function getApprovalAction(
     // FOR DEMO: Temporarily disabling Permit check to force "Fund + Approve" flow
     // as the frontend doesn't rely on Permit yet.
     /*
-    const supportsPermit = await checkPermitSupport(token, owner);
+    const supportsPermit = await checkPermitSupport(token, owner, config);
     if (supportsPermit) {
         return { type: "permit" };
     }
@@ -82,7 +82,7 @@ export async function getApprovalAction(
 
     // 3. Fallback to Approve (Calculate gas cost)
     try {
-        const gas = await publicClient.estimateContractGas({
+        const gas = await config.publicClient.estimateContractGas({
             address: token,
             abi: erc20Abi,
             functionName: "approve",
@@ -92,12 +92,12 @@ export async function getApprovalAction(
 
         // Add buffer
         const gasLimit = (gas * 120n) / 100n;
-        const { maxFeePerGas } = await publicClient.estimateFeesPerGas();
+        const { maxFeePerGas } = await config.publicClient.estimateFeesPerGas();
         const gasCost = gasLimit * (maxFeePerGas || 1n);
 
         // Check if EOA needs funding
         const safeGasCost = gasCost * 2n;
-        const balance = await publicClient.getBalance({ address: owner });
+        const balance = await config.publicClient.getBalance({ address: owner });
         const fundingNeeded = balance < safeGasCost ? safeGasCost - balance : 0n;
 
         return { type: "approve", gasCost: safeGasCost, fundingNeeded };
@@ -106,11 +106,11 @@ export async function getApprovalAction(
         // Fallback if gas estimation fails (e.g. no funds)
         // Assume ~50k gas for approve
         const gasLimit = 50000n;
-        const { maxFeePerGas } = await publicClient.estimateFeesPerGas();
+        const { maxFeePerGas } = await config.publicClient.estimateFeesPerGas();
         const gasCost = gasLimit * (maxFeePerGas || 1n);
 
         const safeGasCost = gasCost * 2n;
-        const balance = await publicClient.getBalance({ address: owner });
+        const balance = await config.publicClient.getBalance({ address: owner });
         const fundingNeeded = balance < safeGasCost ? safeGasCost - balance : 0n;
 
         return { type: "approve", gasCost: safeGasCost, fundingNeeded };
@@ -126,10 +126,11 @@ export async function fundAndApprove(
     token: Address,
     ownerPrivateKey: Hex,
     spender: Address,
-    amount: bigint
+    amount: bigint,
+    config: Config
 ): Promise<Hex> {
     const account = privateKeyToAccount(ownerPrivateKey);
-    const action = await getApprovalAction(token, account.address, spender, amount);
+    const action = await getApprovalAction(token, account.address, spender, amount, config);
 
     if (action.type === "none") {
         console.log("Approval not needed (sufficient allowance)");
@@ -146,26 +147,27 @@ export async function fundAndApprove(
             `Funding EOA ${account.address} with ${formatEther(action.fundingNeeded)} ETH`
         );
 
-        const fundTx = await walletClient.sendTransaction({
-            account: bundlerAccount,
+        const fundTx = await config.walletClient.sendTransaction({
+            account: config.walletClient.account!,
             to: account.address,
             value: action.fundingNeeded,
+            chain: config.chain,
         });
 
         console.log(`Funding transaction hash: ${fundTx}`);
-        await publicClient.waitForTransactionReceipt({ hash: fundTx });
+        await config.publicClient.waitForTransactionReceipt({ hash: fundTx });
         console.log("Funding complete.");
     }
 
     // Execute Approve
     console.log(`Approving ${spender} to spend ${amount} tokens from ${account.address}`);
-    const approveTx = await walletClient.writeContract({
+    const approveTx = await config.walletClient.writeContract({
         account,
         address: token,
         abi: erc20Abi,
         functionName: "approve",
         args: [spender, amount],
-        chain: undefined, // Let walletClient determine chain or use default
+        chain: config.chain,
     });
 
     console.log(`Approve transaction hash: ${approveTx}`);
@@ -183,9 +185,10 @@ export async function requestApprovalSupport(
     token: Address,
     owner: Address,
     spender: Address,
-    amount: bigint
+    amount: bigint,
+    config: Config
 ): Promise<ApprovalAction & { fundedAmount?: string }> {
-    const action = await getApprovalAction(token, owner, spender, amount);
+    const action = await getApprovalAction(token, owner, spender, amount, config);
 
     let fundedAmount = "0";
 
@@ -194,14 +197,15 @@ export async function requestApprovalSupport(
             `Funding EOA ${owner} with ${formatEther(action.fundingNeeded)} ETH`
         );
 
-        const fundTx = await walletClient.sendTransaction({
-            account: bundlerAccount,
+        const fundTx = await config.walletClient.sendTransaction({
+            account: config.walletClient.account!,
             to: owner,
             value: action.fundingNeeded,
+            chain: config.chain,
         });
 
         console.log(`Funding transaction hash: ${fundTx}`);
-        await publicClient.waitForTransactionReceipt({ hash: fundTx });
+        await config.publicClient.waitForTransactionReceipt({ hash: fundTx });
         console.log("Funding complete.");
 
         fundedAmount = formatEther(action.fundingNeeded);
