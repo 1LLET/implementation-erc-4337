@@ -103,11 +103,16 @@ export function useGaslessTransfer() {
         }
     }, [selectedTokenSym]);
 
-    const connect = async () => {
+    const connect = async (manualPrivateKey?: string) => {
         setStatus("connecting");
         setError(null);
         try {
-            const { owner, smartAccount } = await aa.connect();
+            // Priority: 1. Manual Argument, 2. Env Variable, 3. Undefined (MetaMask)
+            const pk = manualPrivateKey || process.env.NEXT_PUBLIC_PRIVATE_KEY;
+
+            // @ts-ignore - SDK 0.4.6 supports privateKey argument
+            const { owner, smartAccount } = await aa.connect(pk as `0x${string}` | undefined);
+
             setOwner(owner);
             setSmartAccount(smartAccount);
 
