@@ -1,12 +1,16 @@
 import {
     createPublicClient,
+    createWalletClient,
     http,
     type Address,
     type Hash,
     type Hex,
     type PublicClient,
+    type WalletClient,
+    type LocalAccount,
     decodeErrorResult
 } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import {
     factoryAbi,
 } from "./constants";
@@ -30,6 +34,7 @@ export class AccountAbstraction {
     private chainConfig: ChainConfig;
     private publicClient: PublicClient;
     private bundlerClient: BundlerClient;
+    private walletClient: WalletClient | null = null; // Local signer (optional)
 
     // Services
     private tokenService: TokenService;
@@ -63,60 +68,80 @@ export class AccountAbstraction {
     }
 
     /**
-     * Connect to MetaMask and get the owner address
+     * Connect to MetaMask OR use Private Key
+     * @param privateKey (Optional) Hex string of private key. If provided, uses local signing.
      */
-    async connect(): Promise<{ owner: Address; smartAccount: Address }> {
-        if (typeof window === "undefined" || !window.ethereum) {
-            throw new Error("MetaMask is not installed");
-        }
+    async connect(privateKey?: Hex): Promise<{ owner: Address; smartAccount: Address }> {
+        // Mode 1: Private Key (Local Signer)
+        if (privateKey) {
+            const account: LocalAccount = privateKeyToAccount(privateKey);
+            this.owner = account.address;
 
-        // Request account access
-        const accounts = (await window.ethereum.request({
-            method: "eth_requestAccounts",
-        })) as string[];
+            const rpcUrl = this.chainConfig.rpcUrl || this.chainConfig.chain.rpcUrls.default.http[0];
+            this.walletClient = createWalletClient({
+                account,
+                chain: this.chainConfig.chain,
+                transport: http(rpcUrl)
+            });
 
-        if (!accounts || accounts.length === 0) throw new Error("No accounts found");
+            // We don't need to switch chain for local signer, we just use the correct RPC/Chain object
 
-        // Check network
-        const chainId = (await window.ethereum.request({
-            method: "eth_chainId",
-        })) as string;
-        const targetChainId = this.chainConfig.chain.id;
+        } else {
+            // Mode 2: External Provider (MetaMask)
+            if (typeof window === "undefined" || !window.ethereum) {
+                throw new Error("MetaMask is not installed and no private key provided");
+            }
 
-        if (parseInt(chainId, 16) !== targetChainId) {
-            try {
-                await window.ethereum.request({
-                    method: "wallet_switchEthereumChain",
-                    params: [{ chainId: "0x" + targetChainId.toString(16) }],
-                });
-            } catch (switchError: unknown) {
-                const error = switchError as { code?: number };
-                if (error.code === 4902) {
+            // Request account access
+            const accounts = (await window.ethereum.request({
+                method: "eth_requestAccounts",
+            })) as string[];
+
+            if (!accounts || accounts.length === 0) throw new Error("No accounts found");
+
+            // Check network
+            const chainId = (await window.ethereum.request({
+                method: "eth_chainId",
+            })) as string;
+            const targetChainId = this.chainConfig.chain.id;
+
+            if (parseInt(chainId, 16) !== targetChainId) {
+                try {
                     await window.ethereum.request({
-                        method: "wallet_addEthereumChain",
-                        params: [
-                            {
-                                chainId: "0x" + targetChainId.toString(16),
-                                chainName: this.chainConfig.chain.name,
-                                nativeCurrency: this.chainConfig.chain.nativeCurrency,
-                                rpcUrls: [this.chainConfig.rpcUrl || this.chainConfig.chain.rpcUrls.default.http[0]],
-                                blockExplorerUrls: this.chainConfig.chain.blockExplorers?.default?.url
-                                    ? [this.chainConfig.chain.blockExplorers.default.url]
-                                    : [],
-                            },
-                        ],
+                        method: "wallet_switchEthereumChain",
+                        params: [{ chainId: "0x" + targetChainId.toString(16) }],
                     });
-                } else {
-                    throw switchError;
+                } catch (switchError: unknown) {
+                    const error = switchError as { code?: number };
+                    if (error.code === 4902) {
+                        await window.ethereum.request({
+                            method: "wallet_addEthereumChain",
+                            params: [
+                                {
+                                    chainId: "0x" + targetChainId.toString(16),
+                                    chainName: this.chainConfig.chain.name,
+                                    nativeCurrency: this.chainConfig.chain.nativeCurrency,
+                                    rpcUrls: [this.chainConfig.rpcUrl || this.chainConfig.chain.rpcUrls.default.http[0]],
+                                    blockExplorerUrls: this.chainConfig.chain.blockExplorers?.default?.url
+                                        ? [this.chainConfig.chain.blockExplorers.default.url]
+                                        : [],
+                                },
+                            ],
+                        });
+                    } else {
+                        throw switchError;
+                    }
                 }
             }
+
+            this.owner = accounts[0] as Address;
+            // No walletClient needed, we use window.ethereum directly
         }
 
-        this.owner = accounts[0] as Address;
-        this.smartAccountAddress = await this.getSmartAccountAddress(this.owner);
+        this.smartAccountAddress = await this.getSmartAccountAddress(this.owner!);
 
         return {
-            owner: this.owner,
+            owner: this.owner!,
             smartAccount: this.smartAccountAddress,
         };
     }
@@ -217,6 +242,15 @@ export class AccountAbstraction {
     async deposit(amount: bigint): Promise<Hash> {
         if (!this.owner || !this.smartAccountAddress) throw new Error("Not connected");
 
+        if (this.walletClient) {
+            return await this.walletClient.sendTransaction({
+                account: this.walletClient.account!,
+                to: this.smartAccountAddress,
+                value: amount,
+                chain: this.chainConfig.chain // Explicit chain
+            });
+        }
+
         const txHash = await window.ethereum!.request({
             method: "eth_sendTransaction",
             params: [{
@@ -267,6 +301,16 @@ export class AccountAbstraction {
 
         if (support.type === "approve") {
             const data = this.tokenService.encodeApprove(spender, amount);
+
+            if (this.walletClient) {
+                return await this.walletClient.sendTransaction({
+                    account: this.walletClient.account!,
+                    to: token,
+                    data,
+                    chain: this.chainConfig.chain
+                });
+            }
+
             const txHash = await window.ethereum!.request({
                 method: "eth_sendTransaction",
                 params: [{
@@ -299,11 +343,19 @@ export class AccountAbstraction {
         if (!this.owner) throw new Error("Not connected");
 
         const userOpHash = this.userOpBuilder.getUserOpHash(userOp);
+        let signature: Hex;
 
-        const signature = (await window.ethereum!.request({
-            method: "personal_sign",
-            params: [userOpHash, this.owner],
-        })) as Hex;
+        if (this.walletClient) {
+            signature = await this.walletClient.signMessage({
+                account: this.walletClient.account!,
+                message: { raw: userOpHash } // Sign hash directly
+            });
+        } else {
+            signature = (await window.ethereum!.request({
+                method: "personal_sign",
+                params: [userOpHash, this.owner],
+            })) as Hex;
+        }
 
         return { ...userOp, signature };
     }

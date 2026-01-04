@@ -29,6 +29,10 @@ await aa.connect();
 
 ### 2. Initialize & Connect
 
+Two modes are supported: **Browser (MetaMask)** and **Server/Script (Private Key)**.
+
+#### Option A: Browser (MetaMask)
+
 ```typescript
 import { AccountAbstraction } from "@1llet.xyz/erc4337-gasless-sdk";
 
@@ -40,6 +44,21 @@ const { owner, smartAccount } = await aa.connect();
 
 console.log("EOA Owner:", owner);
 console.log("Smart Account:", smartAccount);
+```
+
+#### Option B: Server / Backend (Private Key)
+
+Initialize with a private key to sign transactions locally (no popup). Useful for bots or backends.
+
+```typescript
+const PRIVATE_KEY = "0x..."; // Your EOA Private Key
+
+// Connect using the private key
+const { owner, smartAccount } = await aa.connect(PRIVATE_KEY);
+
+console.log("Local Signer:", owner);
+// seamless transaction execution...
+await aa.transfer("USDC", recipient, amount); 
 ```
 
 ### 3. Send a Gasless Transaction
