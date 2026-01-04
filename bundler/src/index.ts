@@ -101,4 +101,11 @@ async function start() {
   });
 }
 
-start().catch(console.error);
+// Export app for Vercel
+export default app;
+
+// Start server if running directly (dev/standalone)
+if (process.env.NODE_ENV !== "production") {
+  start().catch(console.error);
+}
+
