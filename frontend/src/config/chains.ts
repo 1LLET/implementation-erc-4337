@@ -7,7 +7,7 @@ export const availableChains: Record<string, ChainConfig> = {};
 availableChains["baseSepolia"] = {
     ...BASE_SEPOLIA,
     bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
-        ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}?chain=baseSepolia`
+        ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}/rpc?chain=baseSepolia`
         : BASE_SEPOLIA.bundlerUrl
 };
 
@@ -15,7 +15,7 @@ availableChains["baseSepolia"] = {
 availableChains["base"] = {
     ...BASE_MAINNET,
     bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
-        ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}?chain=base`
+        ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}/rpc?chain=base`
         : BASE_MAINNET.bundlerUrl
 };
 
@@ -23,7 +23,7 @@ availableChains["base"] = {
 availableChains["gnosis"] = {
     ...GNOSIS_MAINNET,
     bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
-        ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}?chain=gnosis`
+        ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}/rpc?chain=gnosis`
         : GNOSIS_MAINNET.bundlerUrl
 };
 
