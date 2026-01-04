@@ -1,0 +1,19 @@
+
+// Auto-generated deployments (Hardcoded for Vercel/Next.js)
+export const DEPLOYMENTS: Record<string, any> = {
+    "base": {
+        "SponsorPaymaster": "0x1e13Eb16C565E3f3FDe49A011755e50410bb1F95",
+        "SmartAccountFactory": "0xe2584152891E4769025807DEa0cD611F135aDC68",
+        "EntryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+    },
+    "gnosis": {
+        "SponsorPaymaster": "0x4C36C70d68a7c26326711e8268bb163E3784fA96",
+        "SmartAccountFactory": "0xC8a2Fb1f2E686417A131E09be3320cb5431CcD90",
+        "EntryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+    },
+    "basesepolia": {
+        // Manual add if needed, or assume fallback
+        // Assuming Base Sepolia uses different addresses? Or defaults?
+        // Re-using base Sepolia addresses if I can find them, otherwise default to what user had.
+    }
+};

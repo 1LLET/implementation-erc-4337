@@ -3,28 +3,22 @@ import { type ChainConfig, BASE_MAINNET, BASE_SEPOLIA, GNOSIS_MAINNET } from "@1
 export const availableChains: Record<string, ChainConfig> = {};
 
 // -- Base Sepolia --
-// Clone and override bundlerUrl if env var is set
+// Use internal API route by default
 availableChains["baseSepolia"] = {
     ...BASE_SEPOLIA,
-    bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
-        ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}?chain=baseSepolia`
-        : BASE_SEPOLIA.bundlerUrl
+    bundlerUrl: "/api/rpc?chain=baseSepolia"
 };
 
 // -- Base Mainnet --
 availableChains["base"] = {
     ...BASE_MAINNET,
-    bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
-        ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}?chain=base`
-        : BASE_MAINNET.bundlerUrl
+    bundlerUrl: "/api/rpc?chain=base"
 };
 
 // -- Gnosis Mainnet --
 availableChains["gnosis"] = {
     ...GNOSIS_MAINNET,
-    bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
-        ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}?chain=gnosis`
-        : GNOSIS_MAINNET.bundlerUrl
+    bundlerUrl: "/api/rpc?chain=gnosis"
 };
 
 // Helper for other chains if needed (Optional, user focused on Base)
