@@ -1,9 +1,13 @@
 import { type ChainConfig } from "./types";
 import { base, baseSepolia, gnosis } from "viem/chains";
 
+const DEFAULT_BUNDLER_URL = "https://bundler-erc-4337.vercel.app";
+const BUNDLER_URL = process.env.NEXT_PUBLIC_BUNDLER_URL || process.env.BUNDLER_URL || DEFAULT_BUNDLER_URL;
+
+
 export const BASE_MAINNET: ChainConfig = {
     chain: base,
-    bundlerUrl: "http://localhost:3000/rpc?chain=base", // Default to local bundler pattern
+    bundlerUrl: `${BUNDLER_URL}/rpc?chain=base`, // Dynamic Bundler URL
 
     // Addresses
     entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
@@ -26,7 +30,7 @@ export const BASE_MAINNET: ChainConfig = {
 
 export const GNOSIS_MAINNET: ChainConfig = {
     chain: gnosis,
-    bundlerUrl: "http://localhost:3000/rpc?chain=gnosis", // Default to local bundler pattern
+    bundlerUrl: `${BUNDLER_URL}/rpc?chain=gnosis`, // Dynamic Bundler URL
 
     // Addresses
     entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
@@ -69,7 +73,7 @@ export const GNOSIS_MAINNET: ChainConfig = {
 
 export const BASE_SEPOLIA: ChainConfig = {
     chain: baseSepolia,
-    bundlerUrl: "http://localhost:3000/rpc?chain=baseSepolia", // Default to local bundler pattern
+    bundlerUrl: `${BUNDLER_URL}/rpc?chain=baseSepolia`, // Dynamic Bundler URL
 
     // Addresses
     entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",

@@ -1,6 +1,5 @@
-import { type Address, type Hash, type Hex } from "viem";
+import { type Address, type Hash } from "viem";
 import { type ChainConfig, type UserOperation, type GasEstimate, type UserOpReceipt, type ApprovalSupportResult } from "./types";
-import { entryPointAbi } from "./constants";
 
 export class BundlerClient {
     private bundlerUrl: string;

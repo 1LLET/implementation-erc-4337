@@ -7,7 +7,7 @@ import {
     encodeAbiParameters,
     keccak256
 } from "viem";
-import { type ChainConfig, type UserOperation, type GasEstimate } from "./types";
+import { type ChainConfig, type UserOperation } from "./types";
 import { BundlerClient } from "./BundlerClient";
 import { factoryAbi, smartAccountAbi, entryPointAbi } from "./constants";
 
