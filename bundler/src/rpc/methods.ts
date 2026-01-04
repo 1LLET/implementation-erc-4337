@@ -74,7 +74,7 @@ async function handleGetUserOperationReceipt(
   const userOpHash = params[0] as Hash;
   console.log("\n[eth_getUserOperationReceipt]", userOpHash);
 
-  const receipt = getUserOpReceipt(userOpHash);
+  const receipt = await getUserOpReceipt(userOpHash);
   if (!receipt) {
     return null;
   }
@@ -109,7 +109,7 @@ async function handleGetUserOperationByHash(
   const userOpHash = params[0] as Hash;
   console.log("\n[eth_getUserOperationByHash]", userOpHash);
 
-  const result = getUserOpByHash(userOpHash);
+  const result = await getUserOpByHash(userOpHash);
   if (!result) {
     return null;
   }

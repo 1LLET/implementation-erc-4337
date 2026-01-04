@@ -3,6 +3,10 @@ import cors from "cors";
 import { getChainConfig, type Config } from "./config.js";
 import { rpcRouter } from "./rpc/handler.js";
 import { formatEther } from "viem";
+import { connectDB } from "./db.js";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = express();
 
@@ -49,6 +53,9 @@ app.get("/", (req, res) => {
 // Start server
 async function start() {
   const PORT = process.env.PORT || 3000;
+
+  // Connect to DB
+  await connectDB();
 
   console.log("\n====================================");
   console.log("ERC-4337 Self-Hosted Bundler");
