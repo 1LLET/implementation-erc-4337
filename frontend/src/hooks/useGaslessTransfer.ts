@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { type Address, type Hash, formatUnits, encodeFunctionData, maxUint256 } from "viem";
 import { AccountAbstraction } from "@/lib/accountAbstraction";
-import { erc20Abi, type Token, type ChainConfig } from "@1llet.xyz/erc4337-gasless-sdk";
+import { erc20Abi } from "@1llet.xyz/erc4337-gasless-sdk";
 import { availableChains, defaultChainKey } from "@/config/chains";
 
 export type Status =

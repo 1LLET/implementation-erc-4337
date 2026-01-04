@@ -14,6 +14,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Database connection middleware for Serverless (Vercel)
+app.use(async (req, res, next) => {
+  await connectDB();
+  next();
+});
+
 // RPC endpoint
 app.use("/rpc", rpcRouter);
 
