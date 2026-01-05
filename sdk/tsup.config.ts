@@ -7,4 +7,6 @@ export default defineConfig({
     splitting: false,
     sourcemap: true,
     clean: true,
+    treeshake: true,
+    external: ["@defuse-protocol/one-click-sdk-typescript", "viem", "axios", "stellar-sdk"],
 });

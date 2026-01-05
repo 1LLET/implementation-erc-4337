@@ -1,0 +1,363 @@
+import {
+    createPublicClient,
+    createWalletClient,
+    http,
+    parseSignature,
+    padHex,
+    maxUint256,
+    Address
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import {
+    FacilitatorChainKey,
+    calculateFee
+} from "@/constants/facilitator";
+import { FACILITATOR_NETWORKS } from "@/constants/facilitator";
+import { usdcErc3009Abi } from "@/constants/abis";
+import { tokenMessengerAbi, messageTransmitterAbi } from "@/constants/abis";
+import { SettleResponse, FacilitatorPaymentPayload, CrossChainConfig } from "@/services/types";
+import { createRetrieveAttestation } from "@/utils/cctp";
+import { BridgeStrategy, BridgeContext } from "./types";
+import { NETWORKS } from "@/constants/chainsInformation";
+import { ChainKey } from "@/types/chain";
+
+
+
+/** Converts an address to bytes32 format for CCTP mintRecipient */
+const addressToBytes32 = (address: Address): `0x${string}` => {
+    return padHex(address, { size: 32 });
+};
+
+export class CCTPStrategy implements BridgeStrategy {
+    name = "CCTP";
+
+    canHandle(context: BridgeContext): boolean {
+        const { sourceChain, destChain, sourceToken, destToken } = context;
+        const sourceConfig = NETWORKS[sourceChain];
+        const destConfig = NETWORKS[destChain];
+
+        if (!sourceConfig || !destConfig) return false;
+
+        const sourceCCTP = sourceConfig.crossChainInformation?.circleInformation?.cCTPInformation?.supportCCTP;
+        const destCCTP = destConfig.crossChainInformation?.circleInformation?.cCTPInformation?.supportCCTP;
+
+        // Default to USDC if destToken is missing (backward compatibility) 
+        let targetToken = destToken;
+        if (!targetToken) {
+            if (sourceToken && sourceToken !== "USDC") {
+                targetToken = sourceToken;
+            } else {
+                targetToken = "USDC";
+            }
+        }
+
+        return !!(sourceCCTP && destCCTP && targetToken === "USDC" && (sourceToken === "USDC" || !sourceToken));
+    }
+
+    async execute(context: BridgeContext): Promise<SettleResponse> {
+        const { paymentPayload, sourceChain, destChain, amount, recipient } = context;
+
+        const destConfig = NETWORKS[destChain];
+        const destinationDomain = destConfig.crossChainInformation?.circleInformation?.cCTPInformation?.domain;
+
+        if (destinationDomain === undefined) {
+            return {
+                success: false,
+                errorReason: "Destination chain does not have CCTP domain configured"
+            };
+        }
+
+        const crossChainConfig: CrossChainConfig = {
+            destinationChain: destChain as FacilitatorChainKey,
+            destinationDomain: destinationDomain,
+            mintRecipient: recipient as Address
+        };
+
+        return processCCTPSettlement(
+            paymentPayload,
+            sourceChain as FacilitatorChainKey,
+            amount,
+            crossChainConfig,
+            context.facilitatorPrivateKey,
+            recipient as Address
+        );
+    }
+}
+
+export async function processCCTPSettlement(
+    paymentPayload: FacilitatorPaymentPayload,
+    sourceChain: FacilitatorChainKey,
+    amount: string,
+    crossChainConfig: CrossChainConfig,
+    facilitatorPrivateKey?: string,
+    recipient?: Address
+): Promise<SettleResponse> {
+    if (!facilitatorPrivateKey) {
+        return {
+            success: false,
+            errorReason: "Facilitator Private Key not provided in context"
+        };
+    }
+
+    const networkConfig = FACILITATOR_NETWORKS[sourceChain];
+    if (!networkConfig) {
+        return {
+            success: false,
+            errorReason: `Unsupported chain: ${sourceChain}`
+        };
+    }
+
+    const { authorization, signature } = paymentPayload;
+
+    // Setup clients
+    const facilitatorAccount = privateKeyToAccount(facilitatorPrivateKey as `0x${string}`);
+    const publicClient = createPublicClient({
+        chain: networkConfig.chain,
+        transport: http(networkConfig.rpcUrl)
+    });
+    const walletClient = createWalletClient({
+        account: facilitatorAccount,
+        chain: networkConfig.chain,
+        transport: http(networkConfig.rpcUrl)
+    });
+
+    // Parse signature
+    const { v, r, s } = parseSignature(signature);
+
+
+    // Step 1: TransferWithAuthorization (User -> Facilitator)
+    let transferHash: `0x${string}`;
+    try {
+        transferHash = await walletClient.writeContract({
+            chain: networkConfig.chain,
+            address: networkConfig.usdc,
+            abi: usdcErc3009Abi,
+            functionName: "transferWithAuthorization",
+            args: [
+                authorization.from,
+                authorization.to,
+                BigInt(authorization.value),
+                BigInt(authorization.validAfter),
+                BigInt(authorization.validBefore),
+                authorization.nonce,
+                Number(v),
+                r,
+                s
+            ]
+        });
+
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: transferHash });
+        if (receipt.status !== "success") throw new Error("Transfer execution failed");
+    } catch (error) {
+        return {
+            success: false,
+            errorReason: error instanceof Error ? error.message : "Transfer failed"
+        };
+    }
+
+    return executeCCTPBridge(sourceChain, amount, crossChainConfig, facilitatorPrivateKey, recipient, transferHash, authorization.from);
+}
+
+export async function executeCCTPBridge(
+    sourceChain: FacilitatorChainKey,
+    amount: string,
+    crossChainConfig: CrossChainConfig,
+    facilitatorPrivateKey: string,
+    recipient: Address | undefined,
+    transferHash: `0x${string}`,
+    payerAddress: Address
+): Promise<SettleResponse> {
+    if (!facilitatorPrivateKey) {
+        return { success: false, errorReason: "Facilitator Private Key not provided" };
+    }
+
+    const networkConfig = FACILITATOR_NETWORKS[sourceChain];
+    if (!networkConfig) {
+        return { success: false, errorReason: `Unsupported chain: ${sourceChain}` };
+    }
+
+    // Setup clients
+    const facilitatorAccount = privateKeyToAccount(facilitatorPrivateKey as `0x${string}`);
+    const publicClient = createPublicClient({
+        chain: networkConfig.chain,
+        transport: http(networkConfig.rpcUrl)
+    });
+    const walletClient = createWalletClient({
+        account: facilitatorAccount,
+        chain: networkConfig.chain,
+        transport: http(networkConfig.rpcUrl)
+    });
+
+    // Convert human readable string (e.g. "0.01") to atomic units (6 decimals)
+    const amountBigInt = BigInt(Math.floor(parseFloat(amount) * 1_000_000));
+    const fee = calculateFee();
+
+    // Verify Balances (Safety Check) with Retry for RPC Consistency
+    let facilitatorBalance = BigInt(0);
+    const maxRetries = 10; // Increased retries for stability
+
+    for (let i = 0; i < maxRetries; i++) {
+        facilitatorBalance = await publicClient.readContract({
+            address: networkConfig.usdc,
+            abi: usdcErc3009Abi,
+            functionName: "balanceOf",
+            args: [facilitatorAccount.address]
+        }) as bigint;
+
+        if (facilitatorBalance >= amountBigInt) break;
+
+        console.log(`[CCTP] Balance lag detected. Retrying ${i + 1}/${maxRetries}... (Has: ${facilitatorBalance}, Needs: ${amountBigInt})`);
+        await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3s
+    }
+
+    if (facilitatorBalance < amountBigInt) {
+        return {
+            success: false,
+            transactionHash: transferHash,
+            errorReason: `Insufficient facilitator balance after retries. Has: ${facilitatorBalance}, Needs: ${amountBigInt}`
+        };
+    }
+
+    // Step 2: Approve TokenMessenger
+    try {
+        const approveHash = await walletClient.writeContract({
+            chain: networkConfig.chain,
+            address: networkConfig.usdc,
+            abi: usdcErc3009Abi,
+            functionName: "approve",
+            args: [networkConfig.tokenMessenger, maxUint256]
+        });
+        await publicClient.waitForTransactionReceipt({ hash: approveHash });
+    } catch (e) {
+        console.error("Approval failed", e);
+        return {
+            success: false,
+            transactionHash: transferHash,
+            errorReason: "Approval failed"
+        };
+    }
+
+    // Step 3: DepositForBurn
+    const targetRecipient = recipient || crossChainConfig.mintRecipient;
+    const mintRecipient = addressToBytes32(targetRecipient);
+
+    // Dynamic maxFee calculation (1%, min 200 wei)
+    const maxFee = amountBigInt > BigInt(100)
+        ? BigInt(Math.floor(Math.max(Number(amountBigInt) / 100, 200)))
+        : BigInt(200);
+
+    let burnHash: `0x${string}`;
+    try {
+        burnHash = await walletClient.writeContract({
+            chain: networkConfig.chain,
+            address: networkConfig.tokenMessenger,
+            abi: tokenMessengerAbi,
+            functionName: "depositForBurn",
+            args: [
+                amountBigInt - (fee * BigInt(2)), // Deduct 0.02 USDC Fee (2x Base Fee)
+                crossChainConfig.destinationDomain,
+                mintRecipient,
+                networkConfig.usdc,
+                "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`,
+                maxFee,
+                1000 // minFinalityThreshold
+            ]
+        });
+
+        const burnReceipt = await publicClient.waitForTransactionReceipt({ hash: burnHash });
+        if (burnReceipt.status !== "success") throw new Error("Burn execution failed");
+
+    } catch (e) {
+        return {
+            success: false,
+            transactionHash: transferHash,
+            errorReason: e instanceof Error ? e.message : "Burn failed"
+        };
+    }
+
+    // Step 4: Wait for Attestation
+    let attestationResponse;
+    try {
+        attestationResponse = await createRetrieveAttestation(
+            burnHash,
+            networkConfig.domain.toString(),
+            120000 // 2 min timeout
+        );
+    } catch (e) {
+        console.warn("Attestation timeout", e);
+        return {
+            success: true, // Functionally a "pending" state 
+            transactionHash: transferHash,
+            burnTransactionHash: burnHash,
+            errorReason: "Attestation timeout. Funds burned but not minted."
+        };
+    }
+
+    if (!attestationResponse) {
+        return {
+            success: false,
+            transactionHash: transferHash,
+            burnTransactionHash: burnHash,
+            errorReason: "Attestation failed to retireve"
+        };
+    }
+
+
+    // Step 5: Mint (receiveMessage) on Destination Chain
+    let mintHash: `0x${string}` | undefined;
+    try {
+        const destNetworkConfig = FACILITATOR_NETWORKS[crossChainConfig.destinationChain as FacilitatorChainKey];
+        if (!destNetworkConfig) throw new Error(`Unsupported destination chain: ${crossChainConfig.destinationChain}`);
+
+        const destWalletClient = createWalletClient({
+            account: facilitatorAccount,
+            chain: destNetworkConfig.chain,
+            transport: http(destNetworkConfig.rpcUrl)
+        });
+
+        const destPublicClient = createPublicClient({
+            chain: destNetworkConfig.chain,
+            transport: http(destNetworkConfig.rpcUrl)
+        });
+
+        console.log(`[CCTP] Minting on ${crossChainConfig.destinationChain}...`);
+
+        mintHash = await destWalletClient.writeContract({
+            chain: destNetworkConfig.chain,
+            address: destNetworkConfig.messageTransmitter,
+            abi: messageTransmitterAbi,
+            functionName: "receiveMessage",
+            args: [
+                attestationResponse.message as `0x${string}`,
+                attestationResponse.attestation as `0x${string}`
+            ]
+        });
+
+        console.log(`[CCTP] Mint tx sent: ${mintHash}`);
+        await destPublicClient.waitForTransactionReceipt({ hash: mintHash });
+        console.log(`[CCTP] Mint confirmed!`);
+
+    } catch (e) {
+        console.error("Mint failed", e);
+        return {
+            success: true,
+            transactionHash: transferHash,
+            burnTransactionHash: burnHash,
+            errorReason: "Mint execution failed (Gas error on Dest?)"
+        };
+    }
+
+    return {
+        success: true,
+        transactionHash: transferHash,
+        burnTransactionHash: burnHash,
+        mintTransactionHash: mintHash,
+        payer: payerAddress,
+        fee: fee.toString(),
+        netAmount: amountBigInt.toString(),
+        attestation: {
+            message: attestationResponse.message,
+            attestation: attestationResponse.attestation
+        }
+    };
+}

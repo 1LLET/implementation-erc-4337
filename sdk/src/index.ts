@@ -10,3 +10,10 @@ export type { ChainConfig, Token, UserOperation, UserOpReceipt, GasEstimate, App
 
 // Constants (ABIs)
 export { erc20Abi, smartAccountAbi, entryPointAbi } from "./constants";
+
+// Services
+export { BridgeManager } from "./services/BridgeManager";
+export { NearStrategy } from "./services/near";
+export { CCTPStrategy } from "./services/cctp";
+export { GaslessStrategy } from "./services/gasless";
+export { StandardBridgeStrategy } from "./services/standard";

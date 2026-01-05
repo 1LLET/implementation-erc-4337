@@ -4,7 +4,7 @@ export const availableChains: Record<string, ChainConfig> = {};
 
 // -- Base Sepolia --
 // Clone and override bundlerUrl if env var is set
-availableChains["baseSepolia"] = {
+availableChains[BASE_SEPOLIA.chain.id] = {
     ...BASE_SEPOLIA,
     bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
         ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}/rpc?chain=baseSepolia`
@@ -12,7 +12,7 @@ availableChains["baseSepolia"] = {
 };
 
 // -- Base Mainnet --
-availableChains["base"] = {
+availableChains[BASE_MAINNET.chain.id] = {
     ...BASE_MAINNET,
     bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
         ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}/rpc?chain=base`
@@ -20,7 +20,7 @@ availableChains["base"] = {
 };
 
 // -- Gnosis Mainnet --
-availableChains["gnosis"] = {
+availableChains[GNOSIS_MAINNET.chain.id] = {
     ...GNOSIS_MAINNET,
     bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
         ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}/rpc?chain=gnosis`
@@ -29,4 +29,4 @@ availableChains["gnosis"] = {
 
 // Helper for other chains if needed (Optional, user focused on Base)
 
-export const defaultChainKey = "baseSepolia";
+export const defaultChainKey = BASE_SEPOLIA.chain.id.toString();

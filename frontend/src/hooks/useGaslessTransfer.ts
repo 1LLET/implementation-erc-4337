@@ -284,7 +284,7 @@ export function useGaslessTransfer() {
                     setTxHash(receipt.receipt.transactionHash);
                     setStatus("success");
                     refreshBalance();
-                    return;
+                    return receipt.receipt.transactionHash;
                 }
 
                 // EOA -> Recipient (ERC20 transferFrom)
@@ -342,6 +342,7 @@ export function useGaslessTransfer() {
             setTxHash(receipt.receipt.transactionHash);
             setStatus("success");
             refreshBalance();
+            return receipt.receipt.transactionHash;
 
         } catch (err) {
             console.error("Transfer error:", err);

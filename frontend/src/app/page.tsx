@@ -1,9 +1,9 @@
-import GaslessTransfer from "@/components/GaslessTransfer";
+import MultiChainBridge from "@/components/MultiChainBridge";
 
 export default function Home() {
   return (
     <main>
-      <GaslessTransfer />
+      <MultiChainBridge />
     </main>
   );
 }
