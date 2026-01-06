@@ -12,7 +12,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { factoryAbi, } from "./constants";
-import { type ApprovalSupportResult, type ChainConfig, type UserOperation, type UserOpReceipt } from "./types";
+import { type ApprovalSupportResult, type ChainConfig, type EvmChainConfig, type UserOperation, type UserOpReceipt } from "./types";
 import { BundlerClient } from "./BundlerClient";
 import { TokenService } from "./TokenService";
 import { UserOpBuilder } from "./UserOpBuilder";
@@ -23,7 +23,7 @@ import { UserOpBuilder } from "./UserOpBuilder";
 export class AccountAbstraction {
     private owner: Address | null = null;
     private smartAccountAddress: Address | null = null;
-    private chainConfig: ChainConfig;
+    private chainConfig: EvmChainConfig;
     private publicClient: PublicClient;
     private bundlerClient: BundlerClient;
     private walletClient: WalletClient | null = null;
@@ -36,7 +36,7 @@ export class AccountAbstraction {
     private entryPointAddress: Address;
     private factoryAddress: Address;
 
-    constructor(chainConfig: ChainConfig) {
+    constructor(chainConfig: EvmChainConfig) {
         this.chainConfig = chainConfig;
 
         // Validation

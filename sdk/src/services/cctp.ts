@@ -223,7 +223,8 @@ export async function executeCCTPBridge(
 
     // Convert human readable string (e.g. "0.01") to atomic units (6 decimals)
     const amountBigInt = BigInt(Math.floor(parseFloat(amount) * 1_000_000));
-    const fee = calculateFee();
+    const feeRaw = calculateFee();
+    const fee = BigInt(Math.floor(feeRaw * 1_000_000));
     const minRequired = fee * BigInt(2);
 
     if (amountBigInt <= minRequired) {

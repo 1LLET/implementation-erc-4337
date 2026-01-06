@@ -1,11 +1,11 @@
 import { type Address, type Hash } from "viem";
-import { type ChainConfig, type UserOperation, type GasEstimate, type UserOpReceipt, type ApprovalSupportResult } from "./types";
+import { type ChainConfig, type EvmChainConfig, type UserOperation, type GasEstimate, type UserOpReceipt, type ApprovalSupportResult } from "./types";
 
 export class BundlerClient {
     private bundlerUrl: string;
     private entryPointAddress: Address;
 
-    constructor(config: ChainConfig, entryPointAddress: Address) {
+    constructor(config: EvmChainConfig, entryPointAddress: Address) {
         this.bundlerUrl = config.bundlerUrl;
         this.entryPointAddress = entryPointAddress;
     }

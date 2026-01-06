@@ -1,3 +1,4 @@
+
 import { Address } from "viem";
 import { base, optimism, gnosis, arbitrum, polygon } from "viem/chains";
 import { ChainKey } from "@/types/chain";
@@ -5,9 +6,18 @@ import { FacilitatorNetworkConfig } from "@/services/config";
 
 export type FacilitatorChainKey = ChainKey;
 
-export const calculateFee = (): bigint => {
-    // Basic implementation or fetch from ENV
-    return BigInt(10000); // 0.01 USDC
+export const PlatformFees = {
+    DEV: 0,
+    EVM_TO_OTHER: 0.02,
+    DEFAULT: 0.02
+};
+
+// Dummy addresses for simulation
+export const DUMMY_EVM_ADDRESS = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"; // Vitalik (just a valid address)
+export const DUMMY_STELLAR_ADDRESS = "GB7BDSZU2Y27LYNLJLVEGW5TIVYQ6362DS5QZ5F6S27S227227227AAA";
+
+export const calculateFee = (isDev: boolean = false): number => {
+    return isDev ? PlatformFees.DEV : PlatformFees.DEFAULT;
 };
 
 // Placeholder configuration. User needs to populate this.

@@ -6,7 +6,7 @@ interface UsdcInfoProps {
     balance: bigint;
     allowance: bigint;
     smartAccount: Address | null;
-    tokenAddress?: Address;
+    tokenAddress?: string;
     tokenSymbol: string;
 }
 

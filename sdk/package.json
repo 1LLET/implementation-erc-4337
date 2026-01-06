@@ -3,7 +3,7 @@
     "publishConfig": {
         "access": "public"
     },
-    "version": "0.4.34",
+    "version": "0.4.45",
     "description": "SDK for ERC-4337 Gasless Transfers",
     "main": "./dist/index.js",
     "module": "./dist/index.mjs",
@@ -39,7 +39,9 @@
     },
     "devDependencies": {
         "@types/node": "^25.0.3",
+        "dotenv": "^17.2.3",
         "tsup": "^8.0.0",
+        "tsx": "^4.21.0",
         "typescript": "^5.0.0"
     }
 }

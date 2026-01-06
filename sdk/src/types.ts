@@ -3,18 +3,31 @@ import { type Address, type Chain, type Hash, type Hex } from "viem";
 export interface Token {
     symbol: string;
     decimals: number;
+    address: string;
+}
+
+export interface EvmToken extends Token {
     address: Address;
 }
 
-export interface ChainConfig {
+export interface EvmChainConfig {
     chain: Chain;
     rpcUrl?: string;
     bundlerUrl: string;
     entryPointAddress?: Address;
     factoryAddress?: Address;
     paymasterAddress?: Address;
+    tokens: EvmToken[];
+}
+
+export interface NonEvmChainConfig {
+    chain: { id: number; name: string;[key: string]: any };
+    rpcUrl?: string;
+    bundlerUrl?: string;
     tokens: Token[];
 }
+
+export type ChainConfig = EvmChainConfig | NonEvmChainConfig;
 
 export interface UserOperation {
     sender: Address;

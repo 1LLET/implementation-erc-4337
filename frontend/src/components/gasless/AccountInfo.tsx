@@ -2,8 +2,8 @@ import React from "react";
 import { type Address, formatUnits, maxUint256 } from "viem";
 
 interface AccountInfoProps {
-    owner: Address | null;
-    smartAccount: Address | null;
+    owner: Address | string | null;
+    smartAccount: Address | string | null;
     isDeployed: boolean;
     balance: bigint;
     eoaBalance: bigint;

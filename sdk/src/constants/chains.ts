@@ -4,5 +4,6 @@ export const CHAIN_ID_TO_KEY: Record<string, string> = {
     "100": "Gnosis",
     "10": "Optimism",
     "11155420": "Optimism",
-    "42161": "Arbitrum"
+    "42161": "Arbitrum",
+    "9000": "Stellar"
 };

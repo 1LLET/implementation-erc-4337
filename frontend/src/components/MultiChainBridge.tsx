@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { formatUnits } from "viem";
-import { CHAIN_CONFIGS, CHAIN_ID_TO_KEY } from "@1llet.xyz/erc4337-gasless-sdk";
+import { CHAIN_CONFIGS, CHAIN_ID_TO_KEY, getNearSimulation } from "@1llet.xyz/erc4337-gasless-sdk";
 import { useGaslessTransfer } from "@/hooks/useGaslessTransfer";
 import { LoginView } from "./gasless/LoginView";
 import { AccountInfo } from "./gasless/AccountInfo";
@@ -16,6 +16,11 @@ export default function MultiChainBridge() {
     const [facilitatorKey, setFacilitatorKey] = useState<string>("");
     const [bridgeStatus, setBridgeStatus] = useState<string>("idle");
     const [logs, setLogs] = useState<string[]>([]);
+
+    // Simulation State
+    const [simResult, setSimResult] = useState<any>(null);
+    const [simLoading, setSimLoading] = useState<boolean>(false);
+    const [simError, setSimError] = useState<string | null>(null);
 
     // Wallet State
     const {
@@ -45,8 +50,75 @@ export default function MultiChainBridge() {
 
     const addLog = (msg: string) => setLogs(prev => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
 
+    // Simulation Effect
+    const [debouncedTimer, setDebouncedTimer] = useState<NodeJS.Timeout | null>(null);
+
+    const runSimulation = async () => {
+        if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+            setSimResult(null);
+            setSimError(null);
+            return;
+        }
+
+        const sourceKey = CHAIN_ID_TO_KEY[sourceChain];
+        const destKey = CHAIN_ID_TO_KEY[destChain];
+
+        // Only simulate if chains are mapped
+        if (!sourceKey || !destKey) return;
+
+
+
+        setSimLoading(true);
+        setSimError(null);
+        setSimResult(null);
+
+        try {
+            const result = await getNearSimulation(
+                sourceKey,
+                destKey,
+                amount,
+                destTokenSym,
+                selectedTokenSym
+            );
+
+            if (result.success) {
+                setSimResult(result);
+            } else {
+                setSimError(result.error);
+                setSimResult(result); // Keep result to show minAmount if available
+            }
+        } catch (e: any) {
+            // Check if it's "not supported" to assume it's CCTP or other bridge
+            if (e.message?.includes("Near Intents not supported")) {
+                // Silent fail or set CCTP mode
+                // For now just clear sim
+                setSimResult(null);
+            } else {
+                setSimError(e.message);
+            }
+        } finally {
+            setSimLoading(false);
+        }
+    };
+
+    // Trigger simulation on changes
+    const handleSimChange = () => {
+        if (debouncedTimer) clearTimeout(debouncedTimer);
+        const timer = setTimeout(() => {
+            runSimulation();
+        }, 800);
+        setDebouncedTimer(timer);
+    };
+
+    // We can't use useEffect easily with handleSimChange dependency, so we use useEffect on dependencies
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => {
+        handleSimChange();
+        return () => { if (debouncedTimer) clearTimeout(debouncedTimer); };
+    }, [amount, sourceChain, destChain, destTokenSym, selectedTokenSym]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const handleBridge = async () => {
-        if (!facilitatorKey) {
+        if (!facilitatorKey && sourceChain !== "9000") {
             alert("Please enter a Facilitator Private Key");
             return;
         }
@@ -80,7 +152,7 @@ export default function MultiChainBridge() {
                 facilitatorPrivateKey: facilitatorKey,
                 sourceToken: selectedTokenSym,
                 destToken: destTokenSym,
-                senderAddress: smartAccount || "0x0",
+                senderAddress: smartAccount || (typeof owner === 'string' ? owner : "") || "0x0",
             };
 
             const result = await transferManager.execute(contextPayload);
@@ -238,22 +310,24 @@ export default function MultiChainBridge() {
                         </section>
 
                         {/* 2. Facilitator Configuration */}
-                        <section>
-                            <h2 className="text-xl font-semibold mb-4 text-blue-300">2. Facilitator Configuration</h2>
-                            <div className="bg-gray-900 p-4 rounded-lg border border-gray-600">
-                                <label className="block text-sm text-gray-400 mb-2">Facilitator Private Key</label>
-                                <input
-                                    type="password"
-                                    value={facilitatorKey}
-                                    onChange={(e) => setFacilitatorKey(e.target.value.trim())}
-                                    placeholder="0x..."
-                                    className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
-                                />
-                                <p className="text-xs text-yellow-500 mt-2">
-                                    ⚠ Executes the settlement on destination.
-                                </p>
-                            </div>
-                        </section>
+                        {sourceChain !== "9000" && (
+                            <section>
+                                <h2 className="text-xl font-semibold mb-4 text-blue-300">2. Facilitator Configuration</h2>
+                                <div className="bg-gray-900 p-4 rounded-lg border border-gray-600">
+                                    <label className="block text-sm text-gray-400 mb-2">Facilitator Private Key</label>
+                                    <input
+                                        type="password"
+                                        value={facilitatorKey}
+                                        onChange={(e) => setFacilitatorKey(e.target.value.trim())}
+                                        placeholder="0x..."
+                                        className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
+                                    />
+                                    <p className="text-xs text-yellow-500 mt-2">
+                                        ⚠ Executes the settlement on destination.
+                                    </p>
+                                </div>
+                            </section>
+                        )}
 
                         {/* 3. Transfer Details */}
                         <section>
@@ -410,12 +484,46 @@ export default function MultiChainBridge() {
                                         )}
                                     </div>
                                 </div>
+
+
+                                {/* Simulation Results */}
+                                {(simResult || simLoading || simError) && (
+                                    <div className={`mt-4 p-3 rounded text-sm ${simError ? "bg-red-900/40 border border-red-700" : "bg-gray-700/50 border border-gray-600"}`}>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="font-semibold text-gray-300">Quote Simulation</span>
+                                            {simLoading && <span className="animate-pulse text-yellow-500">Calculating...</span>}
+                                        </div>
+
+                                        {simError ? (
+                                            <div className="text-red-400">
+                                                <p>{simError}</p>
+                                                {simResult?.minAmount && <p className="text-xs mt-1 text-red-300">Min Amount: {simResult.minAmount}</p>}
+                                            </div>
+                                        ) : simResult && (
+                                            <div className="space-y-1">
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-400">Net Amount:</span>
+                                                    <span className="text-white font-mono">{simResult.netAmountBridged} {selectedTokenSym}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-400">Fee:</span>
+                                                    <span className="text-white font-mono">{simResult.protocolFee} {selectedTokenSym}</span>
+                                                </div>
+                                                <div className="flex justify-between pt-1 border-t border-gray-600">
+                                                    <span className="text-green-400 font-bold">Est. Received:</span>
+                                                    <span className="text-green-300 font-mono font-bold">~{simResult.estimatedReceived} {destTokenSym}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                             </div>
                         </section>
 
                         <button
                             onClick={handleBridge}
-                            disabled={bridgeStatus === "bridging" || walletStatus !== "connected"}
+                            disabled={bridgeStatus === "bridging" || walletStatus !== "connected" || (!!simError && !simLoading)} // Disable if sim error
                             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-3 rounded-lg transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {bridgeStatus === "bridging" ? "Processing..." : "Execute Bridge Transfer"}
@@ -437,8 +545,8 @@ export default function MultiChainBridge() {
                             ))}
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
+                </div >
+            </div >
+        </div >
     );
 }

@@ -47,10 +47,10 @@ export function LoginView({ onConnect, onSwitchWallet, error }: LoginViewProps) 
 
             {/* Private Key Section */}
             <div className="bg-gray-700/50 p-4 rounded-xl space-y-3 border border-gray-600">
-                <label className="text-xs text-gray-400 font-bold uppercase block">Private Key Login (No Wallet Needed)</label>
+                <label className="text-xs text-gray-400 font-bold uppercase block">Private Key / Mnemonic (Stellar)</label>
                 <input
                     type="password"
-                    placeholder="0x..."
+                    placeholder="0x... or 12 words..."
                     value={pkInput}
                     onChange={(e) => setPkInput(e.target.value)}
                     className="w-full bg-gray-800 text-white text-sm p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-purple-500 outline-none font-mono"
