@@ -352,13 +352,15 @@ export async function getNearSimulation(
             { dry: true }
         );
 
+        // console.log(">>> [Bridge Quote] API Response:", JSON.stringify(quoteResult.quote, null, 2));
+
         return {
             success: true,
             amountSent: amountNum,
             protocolFee: usedFee,
             netAmountBridged: parseFloat(netAmountBridged),
             // @ts-ignore - access safe property
-            estimatedReceived: quoteResult.quote?.quote?.estimatedOutput || "0",
+            estimatedReceived: quoteResult.quote?.quote?.amountOutFormatted || "0",
             minAmount: MIN_AMOUNT
         };
 
