@@ -65,35 +65,12 @@ export default function MultiChainBridge() {
 
         setBridgeStatus("bridging");
         setLogs([]);
-        addLog(`Starting Bridge: ${sourceKey} -> ${destKey} (${selectedTokenSym} -> ${destTokenSym})`);
-
-        // Detect Same-Chain Transfer (Direct)
-        if (sourceKey === destKey && selectedTokenSym === destTokenSym) {
-            addLog("Executing Direct Transfer (Same Chain)...");
-            try {
-                // Use the existing hook 'transfer' which handles UserOps/AA logic
-                const txHash = await transfer(recipient, amount);
-                if (txHash) {
-                    addLog("Transfer Successful!");
-                    addLog(`Tx Hash: ${txHash}`);
-                    setBridgeStatus("success");
-                } else {
-                    addLog("Error: Transfer failed (no hash returned)");
-                    setBridgeStatus("error");
-                }
-            } catch (err: any) {
-                addLog(`Transfer Error: ${err.message}`);
-                setBridgeStatus("error");
-            }
-            return;
-        }
-
         try {
-            // Dynamically import to ensure it's loaded (or just use standard import if added)
-            const { BridgeManager } = await import("@1llet.xyz/erc4337-gasless-sdk");
-            const bridgeManager = new BridgeManager();
+            // Dynamically import TransferManager from SDK
+            const { TransferManager } = await import("@1llet.xyz/erc4337-gasless-sdk");
+            const transferManager = new TransferManager();
 
-            addLog("[Client] Initializing Bridge Manager...");
+            addLog("[Client] Initializing Transfer Manager...");
 
             const contextPayload = {
                 sourceChain: sourceKey,
@@ -104,10 +81,31 @@ export default function MultiChainBridge() {
                 sourceToken: selectedTokenSym,
                 destToken: destTokenSym,
                 senderAddress: smartAccount || "0x0",
-                // paymentPayload removed as it is not used for CCTP/Near flows
             };
 
-            const result = await bridgeManager.execute(contextPayload);
+            const result = await transferManager.execute(contextPayload);
+
+            // SPECIAL SIGNAL: Direct Transfer Required (Same Chain)
+            if (result.success && result.transactionHash === "DIRECT_TRANSFER_REQUIRED") {
+                addLog("TransferManager Signal: Direct Transfer Required.");
+                addLog("Executing Direct Transfer (Gasless)...");
+
+                try {
+                    const txHash = await transfer(recipient, amount);
+                    if (txHash) {
+                        addLog("Transfer Successful!");
+                        addLog(`Tx Hash: ${txHash}`);
+                        setBridgeStatus("success");
+                    } else {
+                        addLog("Error: Transfer failed (no hash returned)");
+                        setBridgeStatus("error");
+                    }
+                } catch (err: any) {
+                    addLog(`Transfer Error: ${err.message}`);
+                    setBridgeStatus("error");
+                }
+                return;
+            }
 
             if (result.success) {
                 // Check if this is a Near Intent that requires user deposit
@@ -128,7 +126,7 @@ export default function MultiChainBridge() {
                             // Recursive Call - Direct Execution
                             addLog(`Verifying Deposit with Facilitator (Client-Side)...`);
 
-                            const verifyResult = await bridgeManager.execute({
+                            const verifyResult = await transferManager.execute({
                                 ...contextPayload,
                                 depositTxHash: txHash
                             });
@@ -188,6 +186,8 @@ export default function MultiChainBridge() {
             addLog(`Exception: ${e.message}`);
             setBridgeStatus("error");
         }
+
+
     };
 
     return (

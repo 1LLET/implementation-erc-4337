@@ -105,7 +105,7 @@ export async function processCCTPSettlement(
 
     // Step 1: Check Facilitator Balance or Verify Deposit (Push Model)
     const facilitatorAccount = privateKeyToAccount(facilitatorPrivateKey as `0x${string}`);
-    // const { authorization } = paymentPayload; // Legacy
+
     const fromAddress = context.senderAddress || (paymentPayload?.authorization?.from);
 
     if (!fromAddress) {
@@ -122,23 +122,8 @@ export async function processCCTPSettlement(
 
     // ... (rest of logic) ...
 
-    // Step 4: Execute CCTP on Source Chain (or skip if already burned)
-    // In strict model, we assume burn is done if depositTxHash is verified.
-    // If not, we might fail or allow legacy flow?
-    // For now, if depositTxHash is present, we skip 'executeCCTPBridge' (which initiates burn).
-    // Wait, executeCCTPBridge is for BURN.
-    // If depositTxHash is verified, we have 'transferHash' (burn hash) from logs.
-
-    // Logic below handles burn if not done?
-    // Currently, if depositTxHash is verified, 'transferHash' is set.
-    // Then we proceed to fetch attestation.
-
-    // ...
-
-    // executeCCTPBridge call (only if we need to burn, but Strict Deposit implies burn is done by user).
-    // However, the code structure calls executeCCTPBridge.
-    // But if we have 'transferHash', do we skip it?
-    // Let's see the flow downstream. (I can't see lines 150-170 here, assuming logic exists).
+    // Step 4: Execute CCTP on Source Chain
+    // If depositTxHash is verified, we proceed to fetch attestation.
 
     // Replacing the execute call argument:
     // return executeCCTPBridge(..., fromAddress as Address);

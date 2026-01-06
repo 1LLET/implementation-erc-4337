@@ -13,8 +13,6 @@ export { erc20Abi, smartAccountAbi, entryPointAbi } from "./constants";
 export { CHAIN_ID_TO_KEY } from "./constants/chains";
 
 // Services
-export { BridgeManager } from "./services/BridgeManager";
+export { TransferManager } from "./services/TransferManager";
 export { NearStrategy } from "./services/near";
 export { CCTPStrategy } from "./services/cctp";
-export { GaslessStrategy } from "./services/gasless";
-export { StandardBridgeStrategy } from "./services/standard";

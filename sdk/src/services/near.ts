@@ -87,16 +87,10 @@ export class NearStrategy implements BridgeStrategy {
             );
 
             // Return success with the deposit address. 
-            // The Orchestrator or UI will handle sending the funds to this address.
             return {
                 success: true,
-                transactionHash: "PENDING_USER_DEPOSIT", // Placeholder or null
-                netAmount: quoteResult.amountAtomicNet, // Or formatted
-                // We might need to extend SettleResponse to include explicit instruction
-                // For now, we reuse the existing type. 
-                // In a real scenario, we'd add `depositAddress` to the response type.
-                // Assuming SettleResponse is flexible or we console log it for the user context.
-                // To be safe and useful:
+                transactionHash: "PENDING_USER_DEPOSIT",
+                netAmount: quoteResult.amountAtomicNet,
                 data: {
                     depositAddress: quoteResult.depositAddress,
                     amountToDeposit: quoteResult.amountAtomicNet,
