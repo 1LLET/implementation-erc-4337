@@ -1,6 +1,6 @@
 # ERC-4337 Gasless SDK ⛽️
 
-A lightweight, typed SDK to integrate Account Abstraction (ERC-4337) into your dApp. It handles Smart Account creation, gasless transactions, and token approvals seamlessly.
+A lightweight, typed SDK to integrate Account Abstraction (ERC-4337) and Cross-Chain transfers into your dApp. It handles Smart Account creation, gasless transactions, and orchestrates cross-chain bridges.
 
 ## 📦 Installation
 
@@ -10,243 +10,127 @@ npm install @1llet.xyz/erc4337-gasless-sdk viem
 yarn add @1llet.xyz/erc4337-gasless-sdk viem
 ```
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Account Abstraction)
 
-### 1. Configuration
+### 1. Configuration & Initialization
 
-Define the chain configuration (including your Bundler URL and Paymaster).
+Import chain configurations directly from the SDK.
 
 ```typescript
-// 1. Import Config (Chain Registry)
-import { BASE_SEPOLIA, type ChainConfig } from "@1llet.xyz/erc4337-gasless-sdk";
-import { AccountAbstraction } from "@1llet.xyz/erc4337-gasless-sdk";
+import { BASE_MAINNET, AccountAbstraction } from "@1llet.xyz/erc4337-gasless-sdk";
 
-// 2. Initialize
-const aa = new AccountAbstraction(BASE_SEPOLIA);
-
-await aa.connect();
+// Initialize with a supported chain
+const aa = new AccountAbstraction(BASE_MAINNET);
 ```
 
-### 2. Initialize & Connect
+### 2. Connect Wallet
 
-Two modes are supported: **Browser (MetaMask)** and **Server/Script (Private Key)**.
-
-#### Option A: Browser (MetaMask)
+Supports **Browser (MetaMask)** and **Private Key (Server)**.
 
 ```typescript
-import { AccountAbstraction } from "@1llet.xyz/erc4337-gasless-sdk";
-
-const aa = new AccountAbstraction(config);
-
-// Connect to MetaMask (or any injected provider)
-// This calculates the Smart Account address deterministically (Counterfactual)
+// A. Browser (MetaMask / Injected)
 const { owner, smartAccount } = await aa.connect();
 
-console.log("EOA Owner:", owner);
+// B. Private Key (Backend / Bots)
+const { owner, smartAccount } = await aa.connect("0xMY_PRIVATE_KEY");
+
+console.log("EOA:", owner);
 console.log("Smart Account:", smartAccount);
 ```
 
-#### Option B: Server / Backend (Private Key)
+### 3. Send Gasless Transactions
 
-Initialize with a private key to sign transactions locally (no popup). Useful for bots or backends.
-
-```typescript
-const PRIVATE_KEY = "0x..."; // Your EOA Private Key
-
-// Connect using the private key
-const { owner, smartAccount } = await aa.connect(PRIVATE_KEY);
-
-console.log("Local Signer:", owner);
-// seamless transaction execution...
-await aa.transfer("USDC", recipient, amount); 
-```
-
-### 3. Send a Gasless Transaction
-
-Send a transaction where the Gas is paid by the Paymaster (sponsored).
+Transactions are sponsored by the Paymaster automatically.
 
 ```typescript
-import { encodeFunctionData, parseAbi } from "viem";
+// 1. Transfer ERC-20 (USDC)
+await aa.transfer("USDC", recipientAddress, 1000000n); // 1 USDC (6 decimals)
 
-// Example: Calling a precise function on a contract
-const myContractAbi = parseAbi(["function safeMint(address to)"]);
-const callData = encodeFunctionData({
-  abi: myContractAbi,
-  functionName: "safeMint",
-  args: [smartAccount]
+// 2. Transfer Native Token (ETH/DAI/MATIC)
+// The SDK detects the native asset from chain config
+await aa.transfer("ETH", recipientAddress, parseEther("0.1")); 
+
+// 3. Any Contract Call (e.g. Mint NFT)
+await aa.sendTransaction({
+    target: "0xNftContract",
+    data: encodeFunctionData({ ... })
 });
-
-// Build the UserOperation
-// This automatically handles: InitCode (if not deployed), Gas Estimation, and Paymaster data
-const userOp = await aa.buildUserOperationBatch([
-  {
-    target: "0xMyNftContract...",
-    value: 0n,
-    data: callData
-  }
-]);
-
-// Sign with the EOA (MetaMask)
-const signedOp = await aa.signUserOperation(userOp);
-
-// Send to Bundler
-const userOpHash = await aa.sendUserOperation(signedOp);
-console.log("Transaction sent! Hash:", userOpHash);
-
-// Wait for confirmation
-const receipt = await aa.waitForUserOperation(userOpHash);
-console.log("Transaction confirmed in block:", receipt.receipt.blockNumber);
 ```
 
-### 4. Special Feature: Approval Support
+---
 
-Fund the user's EOA with native ETH (via the Paymaster/Bundler) if they need to execute a legacy `approve` transaction and have no gas.
+## 🌉 Cross-Chain Transfer Manager
+
+The `TransferManager` orchestrates transfers between chains, choosing the best strategy (CCTP, Near Intents) or signaling a direct transfer if on the same chain.
 
 ```typescript
-try {
-  const result = await aa.requestApprovalSupport(
-    usdcAddress,
-    spenderAddress, 
-    amount
-  );
-  
-  if (result.fundingNeeded) {
-    console.log(`User was funded with ${result.fundedAmount} ETH to pay for gas!`);
-  }
-} catch (e) {
-  console.error("Failed to fund user:", e);
+import { TransferManager, BridgeContext } from "@1llet.xyz/erc4337-gasless-sdk";
+
+const transferManager = new TransferManager();
+
+const context: BridgeContext = {
+    sourceChain: "Base",
+    destChain: "Optimism",
+    sourceToken: "USDC",
+    destToken: "USDC",
+    amount: "10.5", // Human readable string
+    recipient: "0xRecipient...",
+    senderAddress: "0xSender...",
+    facilitatorPrivateKey: "0x..." // For CCTP/Near verification usage (Backend)
+};
+
+const result = await transferManager.execute(context);
+
+if (result.success) {
+    if (result.transactionHash === "DIRECT_TRANSFER_REQUIRED") {
+        // Signal to Client: Execute direct transfer on same chain!
+        console.log("Execute local transfer:", result.data);
+    } else {
+        // Cross-chain initiated
+        console.log("Bridge Tx:", result.transactionHash);
+    }
+} else {
+    console.error("Error:", result.errorReason);
 }
 ```
 
-## 🛠️ Build Locally
+## 🛠️ Supported Chains
 
-```bash
-git clone https://github.com/your-repo/erc4337-gasless-sdk.git
-cd erc4337-gasless-sdk
-npm install
-npm run build
-```
+The SDK exports pre-configured objects:
 
-## � API Reference
-
-### Balances & Allowances
+- `BASE_MAINNET`
+- `BASE_SEPOLIA`
+- `OPTIMISM_MAINNET`
+- `GNOSIS_MAINNET`
 
 ```typescript
-// Get Smart Account USDC Balance
-const balance = await aa.getUsdcBalance();
-
-// Get EOA (Wallet) USDC Balance
-const eoaBalance = await aa.getEoaUsdcBalance();
-
-// Check how much USDC the Smart Account is allowed to spend from EOA
-const allowance = await aa.getAllowance();
+import { GNOSIS_MAINNET } from "@1llet.xyz/erc4337-gasless-sdk";
 ```
 
-### Account Management
+## 📄 API Reference
 
-```typescript
-// Check if the Smart Account is already deployed on-chain
-const isDeployed = await aa.isAccountDeployed();
+### AccountAbstraction
 
-// Get the Counterfactual Address (deterministic address based on owner)
-const address = await aa.getSmartAccountAddress(ownerAddress);
-
-// Deploy the account (Abstracts build -> sign -> send -> wait)
-// Returns the transaction receipt
-const receipt = await aa.deployAccount();
-```
-
-### Simplified Transactions (v0.2.0+)
-
-Send transactions without manually building, signing, and waiting.
-
-```typescript
-// 1. Send ETH or Call Contract (Single)
-const receipt = await aa.sendTransaction({
-    target: "0x123...",
-    value: 1000000000000000000n, // 1 ETH
-    data: "0x..." // Optional callData
-});
-
-// 2. Send Multiple Transactions (Batch)
-// Great for approving + swapping, or multiple transfers
-const receipt = await aa.sendBatchTransaction([
-    { target: "0xToken...", data: encodeApproveData },
-    { target: "0xSwap...", data: encodeSwapData }
-]);
-
-// 3. Transfer ERC-20 Tokens (Helper)
-// Automatically encodes the
-// 1. Transfer ERC-20 (USDC)
-await aa.transfer("USDC", recipient, amount);
-
-// 2. Transfer Native Token (ETH)
-// The SDK detects the "ETH" symbol and sends a native transaction
-await aa.transfer("ETH", recipient, amount);
-```
-
-// 2. Transfer Native Token (ETH)
-// The SDK detects the "ETH" symbol and sends a native transaction
-await aa.transfer("ETH", recipient, amount);
-```
-
-### Funding the Account
-
-Easily deposit ETH from the connected wallet (EOA) to the Smart Account.
-
-```typescript
-// Deposit 0.1 ETH
-const txHash = await aa.deposit(100000000000000000n);
-```
-
-### High-Level Methods
-
-### Error Decoding
-The SDK now automatically tries to decode cryptic "0x..." errors from the EntryPoint into readable messages like:
-- `Smart Account Error: Transfer amount exceeds balance`
-- `Smart Account: Native transfer failed`
-
-### Simplified Approvals
-
-```typescript
-// Approve a token for a spender (e.g. Smart Account)
-// Automatically handles:
-// 1. Checks if funding is needed (Gasless flow support)
-// 2. Encodes function data
-// 3. Sends transaction via Wallet
-// Returns the txHash or "NOT_NEEDED"
-const txHash = await aa.approveToken(usdcAddress, spenderAddress, amount);
-```
+| Method | Description |
+|--------|-------------|
+| `connect(privateKey?)` | Connects to wallet and calculates Smart Account address |
+| `isAccountDeployed()` | Checks if Smart Account exists on-chain |
+| `deployAccount()` | Deploys the Smart Account (usually updated automatically on first tx) |
+| `transfer(token, to, amount)` | Simplest way to send tokens or ETH |
+| `sendTransaction(tx)` | Send a raw transaction (target, value, data) |
+| `sendBatchTransaction(txs)` | Send multiple transactions in one UserOp (Atomic) |
+| `approveToken(token, spender, amount)` | Approve a spender (handles gasless logic if needed) |
+| `getSmartAccountAddress(owner)` | Get deterministic address for any EOA |
 
 ### Utilities
 
 ```typescript
-// Get current Nonce
-const nonce = await aa.getNonce();
+import { CHAIN_CONFIGS } from "@1llet.xyz/erc4337-gasless-sdk";
 
-// Get UserOp Hash (for manual signing or verification)
-const hash = aa.getUserOpHash(userOp);
+// Access config by Chain ID
+const config = CHAIN_CONFIGS[8453];
 ```
 
-### Constants & Exports
-
-The SDK exports useful constants and ABIs so you don't need to redefine them:
-
-```typescript
-import { 
-  DEPLOYMENTS, 
-  erc20Abi, 
-  factoryAbi, 
-  entryPointAbi 
-} from "@1llet.xyz/erc4337-gasless-sdk";
-
-// Access known contract addresses
-const usdcOnBase = DEPLOYMENTS[8453].usdc;
-
-// Use ABIs directly
-console.log(erc20Abi);
-```
-
-## �📄 License
+## License
 
 MIT

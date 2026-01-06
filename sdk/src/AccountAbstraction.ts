@@ -136,6 +136,23 @@ export class AccountAbstraction {
         };
     }
 
+    // --- Account Management ---
+
+    async isAccountDeployed(): Promise<boolean> {
+        if (!this.smartAccountAddress) return false;
+        const code = await this.publicClient.getBytecode({ address: this.smartAccountAddress });
+        return code !== undefined;
+    }
+
+    async deployAccount(): Promise<UserOpReceipt> {
+        if (!this.owner || !this.smartAccountAddress) throw new Error("Not connected");
+        return this.sendTransaction({
+            target: this.smartAccountAddress,
+            value: 0n,
+            data: "0x"
+        });
+    }
+
     /**
      * Get the Smart Account address for an owner
      */
@@ -170,6 +187,33 @@ export class AccountAbstraction {
     async getAllowance(token: string | Address = "USDC"): Promise<bigint> {
         if (!this.owner || !this.smartAccountAddress) throw new Error("Not connected");
         return this.tokenService.getAllowance(token, this.owner, this.smartAccountAddress);
+    }
+
+    /**
+     * Get comprehensive state of the account for a specific token
+     * Useful for UI initialization
+     */
+    async getAccountState(token: string | Address) {
+        if (!this.owner || !this.smartAccountAddress) throw new Error("Not connected");
+
+        const tokenAddress = this.getTokenAddress(token);
+        const isNative = tokenAddress === "0x0000000000000000000000000000000000000000";
+
+        const [balance, eoaBalance, allowance, isDeployed] = await Promise.all([
+            this.getBalance(token),
+            this.getEoaBalance(token),
+            isNative ? 0n : this.getAllowance(token).catch(() => 0n), // Handle native/error gracefully
+            this.isAccountDeployed()
+        ]);
+
+        return {
+            owner: this.owner,
+            smartAccount: this.smartAccountAddress,
+            balance,
+            eoaBalance,
+            allowance,
+            isDeployed
+        };
     }
 
     // --- Transactions ---
@@ -226,6 +270,104 @@ export class AccountAbstraction {
                 value: "0x" + amount.toString(16)
             }]
         }) as Hash;
+    }
+
+    /**
+     * Smart Transfer: Automatically chooses best method (SA vs EOA) based on balances.
+     * Supports strict fee handling.
+     */
+    async smartTransfer(
+        token: Address | string,
+        recipient: Address,
+        amount: bigint,
+        fee?: { amount: bigint; recipient: Address }
+    ): Promise<UserOpReceipt | { receipt: { transactionHash: Hash } }> {
+        if (!this.owner || !this.smartAccountAddress) throw new Error("Not connected");
+
+        const tokenAddress = this.getTokenAddress(token);
+        const isNative = tokenAddress === "0x0000000000000000000000000000000000000000";
+
+        // Refresh State
+        const [saBal, eoaBal, allowance] = await Promise.all([
+            this.getBalance(token),
+            this.getEoaBalance(token),
+            isNative ? 0n : this.getAllowance(token).catch(() => 0n)
+        ]);
+
+        const totalNeeded = amount + (fee?.amount || 0n);
+
+        // Strategy 1: Smart Account Pay (Preferred)
+        if (saBal >= totalNeeded) {
+            const txs = [];
+
+            // Transfer to Recipient
+            if (isNative) {
+                txs.push({ target: recipient, value: amount, data: "0x" as Hex });
+            } else {
+                txs.push({ target: tokenAddress, value: 0n, data: this.tokenService.encodeTransfer(recipient, amount) });
+            }
+
+            // Transfer Fee
+            if (fee && fee.amount > 0n) {
+                if (isNative) {
+                    txs.push({ target: fee.recipient, value: fee.amount, data: "0x" as Hex });
+                } else {
+                    txs.push({ target: tokenAddress, value: 0n, data: this.tokenService.encodeTransfer(fee.recipient, fee.amount) });
+                }
+            }
+            console.log("SmartTransfer: Using Smart Account");
+            return this.sendBatchTransaction(txs);
+        }
+
+        // Strategy 2: EOA Pay (Fallback / Pull)
+        if (eoaBal >= totalNeeded) {
+            if (isNative) {
+                // Native EOA Transfer (Direct)
+                console.log("SmartTransfer: Using EOA (Native)");
+                if (this.walletClient) {
+                    const hash = await this.walletClient.sendTransaction({
+                        account: this.walletClient.account!,
+                        to: recipient,
+                        value: amount,
+                        chain: this.chainConfig.chain
+                    });
+                    return { receipt: { transactionHash: hash } };
+                }
+                const hash = await window.ethereum!.request({
+                    method: "eth_sendTransaction",
+                    params: [{ from: this.owner, to: recipient, value: "0x" + amount.toString(16) }]
+                }) as Hash;
+                return { receipt: { transactionHash: hash } };
+            } else {
+                // ERC-20 EOA Pull (TransferFrom)
+                console.log("SmartTransfer: Using EOA (Pull)");
+                // Check allowance
+                if (allowance < totalNeeded) {
+                    // Infinite approval standard: maxUint256
+                    throw new Error(`Approval required. Please approve ${token} usage.`);
+                }
+
+                const txs = [];
+                // Pull to Recipient
+                txs.push({
+                    target: tokenAddress,
+                    value: 0n,
+                    data: this.tokenService.encodeTransferFrom(this.owner, recipient, amount)
+                });
+
+                // Pull Fee
+                if (fee && fee.amount > 0n) {
+                    txs.push({
+                        target: tokenAddress,
+                        value: 0n,
+                        data: this.tokenService.encodeTransferFrom(this.owner, fee.recipient, fee.amount)
+                    });
+                }
+                return this.sendBatchTransaction(txs);
+            }
+        }
+
+        throw new Error(`Insufficient funds.`);
     }
 
     async transfer(

@@ -14,5 +14,5 @@ export const NETWORKS: Record<string, ChainConfig> = {
     Stellar: Chains.STELLAR,
     Monad: Chains.Monad,
     BNB: Chains.BNB,
-    GNOSIS: Chains.GNOSIS
+    Gnosis: Chains.GNOSIS
 };

@@ -73,6 +73,17 @@ export class TokenService {
     }
 
     /**
+     * Encode transferFrom data
+     */
+    encodeTransferFrom(sender: Address, recipient: Address, amount: bigint): `0x${string}` {
+        return encodeFunctionData({
+            abi: erc20Abi,
+            functionName: "transferFrom",
+            args: [sender, recipient, amount]
+        });
+    }
+
+    /**
      * Encode approve data
      */
     encodeApprove(spender: Address, amount: bigint): `0x${string}` {
