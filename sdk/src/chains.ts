@@ -1,5 +1,5 @@
 import { type ChainConfig } from "./types";
-import { base, baseSepolia, gnosis } from "viem/chains";
+import { base, baseSepolia, gnosis, optimism } from "viem/chains";
 
 const DEFAULT_BUNDLER_URL = "https://bundler-erc-4337.vercel.app";
 const BUNDLER_URL = process.env.NEXT_PUBLIC_BUNDLER_URL || process.env.BUNDLER_URL || DEFAULT_BUNDLER_URL;
@@ -19,6 +19,39 @@ export const BASE_MAINNET: ChainConfig = {
             symbol: "USDC",
             decimals: 6,
             address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+        },
+        {
+            symbol: "ETH",
+            decimals: 18,
+            address: "0x0000000000000000000000000000000000000000"
+        }
+    ]
+};
+
+export const OPTIMISM_MAINNET: ChainConfig = {
+    chain: optimism,
+    bundlerUrl: `${BUNDLER_URL}/rpc?chain=optimism`, // Dynamic Bundler URL
+
+    // Addresses
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    factoryAddress: "0x3CE963866d3Be7Fe4354DBe892Aab52a0a18aeb2",
+    paymasterAddress: "0x0dB771d11F84E8541AA651363DF14E4401d01216",
+
+    tokens: [
+        {
+            symbol: "USDC",
+            decimals: 6,
+            address: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+        },
+        {
+            symbol: "USDT",
+            decimals: 6,
+            address: "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58",
+        },
+        {
+            symbol: "OP",
+            decimals: 18,
+            address: "0x4200000000000000000000000000000000000042",
         },
         {
             symbol: "ETH",
@@ -98,5 +131,6 @@ export const BASE_SEPOLIA: ChainConfig = {
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
     [base.id]: BASE_MAINNET,
     [baseSepolia.id]: BASE_SEPOLIA,
-    [gnosis.id]: GNOSIS_MAINNET
+    [gnosis.id]: GNOSIS_MAINNET,
+    [optimism.id]: OPTIMISM_MAINNET
 };

@@ -3,7 +3,7 @@ export { AccountAbstraction } from "./AccountAbstraction";
 export { BundlerClient } from "./BundlerClient";
 
 // Config & Registry
-export { BASE_MAINNET, BASE_SEPOLIA, GNOSIS_MAINNET, CHAIN_CONFIGS } from "./chains";
+export { BASE_MAINNET, BASE_SEPOLIA, GNOSIS_MAINNET, CHAIN_CONFIGS, OPTIMISM_MAINNET } from "./chains";
 
 // Types
 export type { ChainConfig, Token, UserOperation, UserOpReceipt, GasEstimate, ApprovalSupportResult } from "./types";

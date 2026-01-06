@@ -47,6 +47,7 @@ export interface BridgeContext {
     senderAddress?: string;
     facilitatorPrivateKey?: string;
     feeRecipient?: string;
+    depositTxHash?: string;
 }
 
 

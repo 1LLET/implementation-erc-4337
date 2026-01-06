@@ -1,4 +1,4 @@
-import { type ChainConfig, BASE_MAINNET, BASE_SEPOLIA, GNOSIS_MAINNET } from "@1llet.xyz/erc4337-gasless-sdk";
+import { type ChainConfig, BASE_MAINNET, BASE_SEPOLIA, GNOSIS_MAINNET, OPTIMISM_MAINNET } from "@1llet.xyz/erc4337-gasless-sdk";
 
 export const availableChains: Record<string, ChainConfig> = {};
 
@@ -25,6 +25,13 @@ availableChains[GNOSIS_MAINNET.chain.id] = {
     bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
         ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}/rpc?chain=gnosis`
         : GNOSIS_MAINNET.bundlerUrl
+};
+
+availableChains[OPTIMISM_MAINNET.chain.id] = {
+    ...OPTIMISM_MAINNET,
+    bundlerUrl: process.env.NEXT_PUBLIC_BUNDLER_URL
+        ? `${process.env.NEXT_PUBLIC_BUNDLER_URL}/rpc?chain=optimism`
+        : OPTIMISM_MAINNET.bundlerUrl
 };
 
 // Helper for other chains if needed (Optional, user focused on Base)

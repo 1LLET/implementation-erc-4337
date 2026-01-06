@@ -8,5 +8,10 @@
     "SponsorPaymaster": "0x4C36C70d68a7c26326711e8268bb163E3784fA96",
     "SmartAccountFactory": "0xC8a2Fb1f2E686417A131E09be3320cb5431CcD90",
     "EntryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+  },
+  "optimism": {
+    "SponsorPaymaster": "0x0dB771d11F84E8541AA651363DF14E4401d01216",
+    "SmartAccountFactory": "0x3CE963866d3Be7Fe4354DBe892Aab52a0a18aeb2",
+    "EntryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
   }
 }

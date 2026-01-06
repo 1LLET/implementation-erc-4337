@@ -74,24 +74,20 @@ export class CCTPStrategy implements BridgeStrategy {
         };
 
         return processCCTPSettlement(
-            paymentPayload,
-            sourceChain as FacilitatorChainKey,
-            amount,
-            crossChainConfig,
-            context.facilitatorPrivateKey,
-            recipient as Address
+            context,
+            crossChainConfig
         );
     }
 }
 
 export async function processCCTPSettlement(
-    paymentPayload: FacilitatorPaymentPayload,
-    sourceChain: FacilitatorChainKey,
-    amount: string,
-    crossChainConfig: CrossChainConfig,
-    facilitatorPrivateKey?: string,
-    recipient?: Address
+    context: BridgeContext,
+    crossChainConfig: CrossChainConfig
 ): Promise<SettleResponse> {
+    const { paymentPayload, sourceChain, amount, recipient, facilitatorPrivateKey, depositTxHash } = context;
+
+    console.log(`[SDK v0.4.22] Processing CCTP. DepositHash: ${depositTxHash} (${typeof depositTxHash})`);
+
     if (!facilitatorPrivateKey) {
         return {
             success: false,
@@ -107,55 +103,79 @@ export async function processCCTPSettlement(
         };
     }
 
-    const { authorization, signature } = paymentPayload;
-
-    // Setup clients
+    // Step 1: Check Facilitator Balance or Verify Deposit (Push Model)
     const facilitatorAccount = privateKeyToAccount(facilitatorPrivateKey as `0x${string}`);
+    const { authorization } = paymentPayload;
+
+    const usdcAddress = networkConfig.usdc;
+    const amountBigInt = BigInt(Math.floor(parseFloat(amount) * 1_000_000)); // USDC 6 decimals
+
     const publicClient = createPublicClient({
         chain: networkConfig.chain,
         transport: http(networkConfig.rpcUrl)
     });
-    const walletClient = createWalletClient({
-        account: facilitatorAccount,
-        chain: networkConfig.chain,
-        transport: http(networkConfig.rpcUrl)
-    });
 
-    // Parse signature
-    const { v, r, s } = parseSignature(signature);
+    // A. If depositTxHash is provided (Step 2: Verification)
+    if (depositTxHash) {
+        console.log(`[CCTP] Verifying deposit hash: ${depositTxHash}`);
+        try {
+            const receipt = await publicClient.waitForTransactionReceipt({ hash: depositTxHash as `0x${string}` });
 
+            if (receipt.status !== "success") {
+                throw new Error("Deposit transaction failed on-chain");
+            }
+        } catch (e) {
+            return {
+                success: false,
+                errorReason: `Invalid deposit transaction: ${e instanceof Error ? e.message : "Unknown error"}`
+            };
+        }
 
-    // Step 1: TransferWithAuthorization (User -> Facilitator)
-    let transferHash: `0x${string}`;
-    try {
-        transferHash = await walletClient.writeContract({
-            chain: networkConfig.chain,
-            address: networkConfig.usdc,
-            abi: usdcErc3009Abi,
-            functionName: "transferWithAuthorization",
-            args: [
-                authorization.from,
-                authorization.to,
-                BigInt(authorization.value),
-                BigInt(authorization.validAfter),
-                BigInt(authorization.validBefore),
-                authorization.nonce,
-                Number(v),
-                r,
-                s
-            ]
-        });
+        // B. Check Balance (Wait logic) - Only check if we have a hash implying a deposit matched
+        let facilitatorBalance = BigInt(0);
+        const maxRetries = 5;
 
-        const receipt = await publicClient.waitForTransactionReceipt({ hash: transferHash });
-        if (receipt.status !== "success") throw new Error("Transfer execution failed");
-    } catch (error) {
+        for (let i = 0; i < maxRetries; i++) {
+            facilitatorBalance = await publicClient.readContract({
+                address: usdcAddress,
+                abi: usdcErc3009Abi,
+                functionName: "balanceOf",
+                args: [facilitatorAccount.address]
+            }) as bigint;
+
+            if (facilitatorBalance >= amountBigInt) break;
+            await new Promise(r => setTimeout(r, 2000));
+        }
+
+        if (facilitatorBalance < amountBigInt) {
+            return {
+                success: false,
+                errorReason: "Deposit verified but facilitator balance insufficient (Funds sent to wrong address?)"
+            };
+        }
+
+    } else {
+        // No hash provided -> Always Prompt for Deposit (Strict Push Model)
+        console.log("[SDK v0.4.22] No deposit hash. Returning PENDING_USER_DEPOSIT.");
         return {
-            success: false,
-            errorReason: error instanceof Error ? error.message : "Transfer failed"
+            success: true,
+            data: {
+                depositAddress: facilitatorAccount.address,
+                amountToDeposit: amountBigInt.toString(),
+                chainId: networkConfig.chainId
+            },
+            attestation: {
+                message: "PENDING_USER_DEPOSIT_v22",
+                attestation: "0x"
+            },
+            transactionHash: "PENDING_USER_DEPOSIT_v22"
         };
     }
 
-    return executeCCTPBridge(sourceChain, amount, crossChainConfig, facilitatorPrivateKey, recipient, transferHash, authorization.from);
+    // Funds are present, proceed to bridge
+    const transferHash = (depositTxHash as `0x${string}`) || "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+    return executeCCTPBridge(sourceChain, amount, crossChainConfig, facilitatorPrivateKey, recipient as Address, transferHash, authorization.from);
 }
 
 export async function executeCCTPBridge(
@@ -191,10 +211,19 @@ export async function executeCCTPBridge(
     // Convert human readable string (e.g. "0.01") to atomic units (6 decimals)
     const amountBigInt = BigInt(Math.floor(parseFloat(amount) * 1_000_000));
     const fee = calculateFee();
+    const minRequired = fee * BigInt(2);
 
-    // Verify Balances (Safety Check) with Retry for RPC Consistency
+    if (amountBigInt <= minRequired) {
+        return {
+            success: false,
+            transactionHash: transferHash,
+            errorReason: `Amount too small. Minimum required: ${Number(minRequired) / 1_000_000} USDC (to cover bridge fees)`
+        };
+    }
+
+    // Re-verify Balance (Double Check)
     let facilitatorBalance = BigInt(0);
-    const maxRetries = 10; // Increased retries for stability
+    const maxRetries = 2;
 
     for (let i = 0; i < maxRetries; i++) {
         facilitatorBalance = await publicClient.readContract({

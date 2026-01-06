@@ -50,6 +50,7 @@ export default function MultiChainBridge() {
         "8453": "Base",
         "84532": "Base",
         "100": "GNOSIS",
+        "10": "Optimism",
         "11155420": "Optimism",
         "42161": "Arbitrum"
     };
@@ -77,65 +78,108 @@ export default function MultiChainBridge() {
         addLog(`Starting Bridge: ${sourceKey} -> ${destKey} (${selectedTokenSym} -> ${destTokenSym})`);
 
         try {
-            const response = await fetch("/api/bridge/settle", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    sourceChain: sourceKey,
-                    destChain: destKey,
-                    amount,
-                    recipient,
-                    facilitatorPrivateKey: facilitatorKey,
-                    sourceToken: selectedTokenSym,
-                    destToken: destTokenSym,
-                    // Real flow would generate signature here using 'smartAccount' context
-                    paymentPayload: {
-                        authorization: {
-                            from: smartAccount || "0x0",
-                            to: "0xFacilitator",
-                            value: "10000000",
-                            validAfter: 0,
-                            validBefore: 9999999999,
-                            nonce: "0x0"
-                        },
-                        signature: "0xMockSignatureForReview"
-                    }
-                })
-            });
+            // Dynamically import to ensure it's loaded (or just use standard import if added)
+            // For now, I'll assume standard import will be added.
+            const { BridgeManager } = await import("@1llet.xyz/erc4337-gasless-sdk");
+            const bridgeManager = new BridgeManager();
 
-            const data = await response.json();
+            addLog("[Client] Initializing Bridge Manager...");
 
-            if (data.success) {
+            const contextPayload = {
+                sourceChain: sourceKey,
+                destChain: destKey,
+                amount,
+                recipient,
+                facilitatorPrivateKey: facilitatorKey,
+                sourceToken: selectedTokenSym,
+                destToken: destTokenSym,
+                paymentPayload: {
+                    authorization: {
+                        from: smartAccount || "0x0",
+                        to: "0xFacilitator" as `0x${string}`,
+                        value: BigInt("10000000"),
+                        validAfter: 0n,
+                        validBefore: 9999999999n,
+                        nonce: "0x0" as `0x${string}`
+                    },
+                    signature: "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`
+                }
+            };
+
+            const result = await bridgeManager.execute(contextPayload);
+
+            if (result.success) {
                 // Check if this is a Near Intent that requires user deposit
-                if (data.data?.attestation?.message === "PENDING_USER_DEPOSIT" || data.data?.transactionHash === "PENDING_USER_DEPOSIT") {
-                    const depositData = data.data.data; // Nested data from SDK SettleResponse
+                if ((result.attestation?.message && result.attestation?.message.startsWith("PENDING_USER_DEPOSIT")) ||
+                    (result.transactionHash && result.transactionHash.startsWith("PENDING_USER_DEPOSIT"))) {
+
+                    const depositData = result.data;
                     if (depositData && depositData.depositAddress && depositData.amountToDeposit) {
-                        addLog(`Near Intent Created! Deposit Address: ${depositData.depositAddress}`);
+                        addLog(`Deposit Required! Address: ${depositData.depositAddress}`);
                         addLog(`Initiating Transfer...`);
 
                         try {
-                            // Convert atomic units (e.g. "10000") back to human readable (e.g. "0.01") before calling transfer
-                            // because useGaslessTransfer.transfer expects human readable and multiplies by decimals again.
                             const amountHuman = formatUnits(BigInt(depositData.amountToDeposit), selectedToken?.decimals || 6);
-
                             const txHash = await transfer(depositData.depositAddress, amountHuman);
                             addLog(`Deposit Sent! Tx Hash: ${txHash}`);
-                            setBridgeStatus("success");
+                            addLog(`Verification Payload: Hash=${txHash}`);
+
+                            // Recursive Call - Direct Execution
+                            addLog(`Verifying Deposit with Facilitator (Client-Side)...`);
+
+                            const verifyResult = await bridgeManager.execute({
+                                ...contextPayload,
+                                depositTxHash: txHash
+                            });
+
+                            if (verifyResult.success) {
+                                if ((verifyResult.attestation?.message && verifyResult.attestation?.message.startsWith("PENDING_USER_DEPOSIT")) ||
+                                    (verifyResult.transactionHash && verifyResult.transactionHash.startsWith("PENDING_USER_DEPOSIT"))) {
+
+                                    addLog(`Error: Verification failed. SDK did not recognize the deposit hash.`);
+                                    setBridgeStatus("error");
+                                } else {
+                                    addLog("Bridge Successful!");
+
+                                    if (verifyResult.burnTransactionHash) {
+                                        addLog(`Burn Hash: ${verifyResult.burnTransactionHash}`);
+                                    }
+                                    if (verifyResult.mintTransactionHash) {
+                                        addLog(`Mint Hash: ${verifyResult.mintTransactionHash}`);
+                                    }
+
+                                    // For Near Intents or others that use 'transactionHash' as the main success indicator
+                                    if (!verifyResult.burnTransactionHash && !verifyResult.mintTransactionHash && verifyResult.transactionHash && verifyResult.transactionHash !== "PENDING_USER_DEPOSIT") {
+                                        // Don't log duplicate if it's the same as deposit hash we already logged, but verifyResult.transactionHash might be different?
+                                        // In Near strategy, it returns the depositTxHash.
+                                        // We can optionally log it or just leave "Bridge Successful!".
+                                    }
+
+                                    if (verifyResult.errorReason) {
+                                        addLog(`Warning: ${verifyResult.errorReason}`);
+                                    }
+                                    setBridgeStatus("success");
+                                }
+                            } else {
+                                addLog(`Bridge Error: ${verifyResult.errorReason}`);
+                                setBridgeStatus("error");
+                            }
+
                         } catch (transferError: any) {
                             addLog(`Deposit Transfer Failed: ${transferError.message}`);
                             setBridgeStatus("error");
                         }
                     } else {
-                        addLog("Warning: Near Intent created but missing deposit details.");
+                        addLog("Warning: Deposit Required but missing details.");
                         setBridgeStatus("success");
                     }
                 } else {
                     addLog("Bridge Successful!");
-                    addLog(`Tx Hash: ${data.data.transactionHash}`);
+                    addLog(`Tx Hash: ${result.transactionHash}`);
                     setBridgeStatus("success");
                 }
             } else {
-                addLog(`Error: ${data.errorReason}`);
+                addLog(`Error: ${result.errorReason}`);
                 setBridgeStatus("error");
             }
 
@@ -168,7 +212,7 @@ export default function MultiChainBridge() {
                                         <AccountInfo
                                             owner={owner}
                                             smartAccount={smartAccount}
-                                            isDeployed={true}
+                                            isDeployed={isDeployed}
                                             balance={balance}
                                             eoaBalance={eoaBalance}
                                             allowance={allowance}
@@ -200,7 +244,7 @@ export default function MultiChainBridge() {
                                 <input
                                     type="password"
                                     value={facilitatorKey}
-                                    onChange={(e) => setFacilitatorKey(e.target.value)}
+                                    onChange={(e) => setFacilitatorKey(e.target.value.trim())}
                                     placeholder="0x..."
                                     className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
                                 />

@@ -38,7 +38,7 @@ async function main() {
 
 
     // 3. Fund Paymaster (Base & Gnosis)
-    if (network.name === "base" || network.name === "gnosis") {
+    if (network.name === "base" || network.name === "optimism") {
         console.log("\n3. Funding Paymaster (0.00002 ETH)...");
         try {
             const fundAmount = ethers.parseEther("0.00002");

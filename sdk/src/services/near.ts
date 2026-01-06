@@ -27,8 +27,54 @@ export class NearStrategy implements BridgeStrategy {
     }
 
     async execute(context: BridgeContext): Promise<SettleResponse> {
-        const { sourceChain, destChain, amount, recipient, destToken, sourceToken, senderAddress } = context;
+        const { sourceChain, destChain, amount, recipient, destToken, sourceToken, senderAddress, depositTxHash } = context;
 
+        // 1. Verify Deposit if Hash Provided
+        if (depositTxHash) {
+            console.log(`[NearStrategy] Verifying deposit hash: ${depositTxHash}`);
+
+            // We need RPC to verify. Using FACILITATOR_NETWORKS for convenience as it has clean RPCs
+            // dynamic import to avoid circular dep issues if any, or just import at top.
+            // Assuming FACILITATOR_NETWORKS is available.
+            const { createPublicClient, http } = await import("viem");
+            const { FACILITATOR_NETWORKS } = await import("@/constants/facilitator");
+
+            const networkConfig = FACILITATOR_NETWORKS[sourceChain];
+            if (!networkConfig) {
+                return { success: false, errorReason: `Unsupported source chain for verification: ${sourceChain}` };
+            }
+
+            const publicClient = createPublicClient({
+                chain: networkConfig.chain,
+                transport: http(networkConfig.rpcUrl)
+            });
+
+            try {
+                console.log(`[NearStrategy] Waiting for receipt...`);
+                const receipt = await publicClient.waitForTransactionReceipt({ hash: depositTxHash as `0x${string}` });
+                console.log(`[NearStrategy] Receipt found. Status: ${receipt.status}`);
+
+                if (receipt.status === "success") {
+                    return {
+                        success: true,
+                        transactionHash: depositTxHash,
+                        netAmount: amount, // rough estimate or we can re-quote if needed
+                        data: {
+                            // Info for UI
+                            completed: true
+                        }
+                    };
+                } else {
+                    console.error(`[NearStrategy] Transaction failed. Status: ${receipt.status}`);
+                    return { success: false, errorReason: `Transaction Reverted on-chain (Status: ${receipt.status})` };
+                }
+            } catch (e: any) {
+                console.error(`[NearStrategy] Verification Error:`, e);
+                return { success: false, errorReason: `Verification Error: ${e.message}` };
+            }
+        }
+
+        // 2. No Hash -> Get Quote & Prompt Deposit
         try {
             const quoteResult = await getNearQuote(
                 sourceChain,
