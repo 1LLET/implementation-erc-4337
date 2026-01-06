@@ -1,6 +1,5 @@
 import {
     type Address,
-    type Hash,
     type Hex,
     type PublicClient,
     encodeFunctionData,
@@ -27,11 +26,7 @@ export class UserOpBuilder {
         this.bundlerClient = bundlerClient;
         this.publicClient = publicClient;
 
-        // Resolved in AA or here? Let's assume passed valid config or resolve again
-        // Ideally we shouldn't duplicate logic. AA resolves them.
-        // Let's rely on config having them or resolving valid ones.
-        // For now take from config or defaults.
-        this.entryPointAddress = chainConfig.entryPointAddress!; // Assumed validated by AA
+        this.entryPointAddress = chainConfig.entryPointAddress!;
         this.factoryAddress = chainConfig.factoryAddress!;
     }
 

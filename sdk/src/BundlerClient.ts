@@ -3,12 +3,10 @@ import { type ChainConfig, type UserOperation, type GasEstimate, type UserOpRece
 
 export class BundlerClient {
     private bundlerUrl: string;
-    private chainId: number;
     private entryPointAddress: Address;
 
     constructor(config: ChainConfig, entryPointAddress: Address) {
         this.bundlerUrl = config.bundlerUrl;
-        this.chainId = config.chain.id;
         this.entryPointAddress = entryPointAddress;
     }
 

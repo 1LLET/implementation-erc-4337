@@ -50,6 +50,10 @@ export interface EvmInformation {
     rpcUrl: string | null;
     supports7702: boolean;
     erc4337: boolean;
+    bundlerUrl?: string;
+    entryPointAddress?: Address;
+    factoryAddress?: Address;
+    paymasterAddress?: Address;
 }
 
 export interface NonEvmInformation {

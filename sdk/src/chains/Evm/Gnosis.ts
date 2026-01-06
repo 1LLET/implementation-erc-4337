@@ -1,7 +1,6 @@
-
 import { gnosis } from "viem/chains";
-import { Address } from "abitype";
 import { ChainConfig } from "../../types/chain.js";
+import { BUNDLER_URL } from "../../constants/bundler";
 
 export const GNOSIS: ChainConfig = {
     assets: [
@@ -47,6 +46,10 @@ export const GNOSIS: ChainConfig = {
         rpcUrl: gnosis.rpcUrls.default.http[0],
         supports7702: true,
         erc4337: true,
+        bundlerUrl: `${BUNDLER_URL}/rpc?chain=gnosis`,
+        entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+        factoryAddress: "0xC8a2Fb1f2E686417A131E09be3320cb5431CcD90",
+        paymasterAddress: "0x4C36C70d68a7c26326711e8268bb163E3784fA96"
     },
     crossChainInformation: {
         circleInformation: {

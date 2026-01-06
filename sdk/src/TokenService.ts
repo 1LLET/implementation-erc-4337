@@ -9,7 +9,6 @@ export class TokenService {
     constructor(chainConfig: ChainConfig, publicClient: PublicClient) {
         this.publicClient = publicClient;
 
-        // Initialize Tokens
         chainConfig.tokens.forEach(token => {
             this.tokens.set(token.symbol.toUpperCase(), token);
         });
@@ -19,10 +18,7 @@ export class TokenService {
      * Resolve token address from symbol or return address if provided
      */
     getTokenAddress(token: string | Address): Address {
-        // Native Token (ETH)
-        if (token === "ETH") {
-            return "0x0000000000000000000000000000000000000000";
-        }
+
 
         if (token.startsWith("0x")) return token as Address;
         const info = this.tokens.get(token.toUpperCase());
@@ -36,12 +32,9 @@ export class TokenService {
     async getBalance(token: string | Address, account: Address): Promise<bigint> {
         const address = this.getTokenAddress(token);
 
-        // Native Balance
         if (address === "0x0000000000000000000000000000000000000000") {
             return await this.publicClient.getBalance({ address: account });
         }
-
-        // ERC-20 Balance
         return await this.publicClient.readContract({
             address,
             abi: erc20Abi,
@@ -57,7 +50,7 @@ export class TokenService {
         const address = this.getTokenAddress(token);
 
         if (address === "0x0000000000000000000000000000000000000000") {
-            return 0n; // Native token has no allowance
+            return 0n;
         }
 
         return await this.publicClient.readContract({

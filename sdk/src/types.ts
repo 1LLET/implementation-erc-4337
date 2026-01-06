@@ -8,7 +8,7 @@ export interface Token {
 
 export interface ChainConfig {
     chain: Chain;
-    rpcUrl?: string; // Optional, defaults to chain.rpcUrls.default
+    rpcUrl?: string;
     bundlerUrl: string;
     entryPointAddress?: Address;
     factoryAddress?: Address;

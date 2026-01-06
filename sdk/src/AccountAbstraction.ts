@@ -1,26 +1,18 @@
 import {
+    type Address,
     createPublicClient,
     createWalletClient,
-    http,
-    type Address,
+    decodeErrorResult,
     type Hash,
     type Hex,
-    type PublicClient,
-    type WalletClient,
+    http,
     type LocalAccount,
-    decodeErrorResult
+    type PublicClient,
+    type WalletClient
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import {
-    factoryAbi,
-} from "./constants";
-import {
-    type ChainConfig,
-    type UserOperation,
-    type UserOpReceipt,
-    type ApprovalSupportResult,
-    type Token
-} from "./types";
+import { factoryAbi, } from "./constants";
+import { type ApprovalSupportResult, type ChainConfig, type UserOperation, type UserOpReceipt } from "./types";
 import { BundlerClient } from "./BundlerClient";
 import { TokenService } from "./TokenService";
 import { UserOpBuilder } from "./UserOpBuilder";
@@ -34,7 +26,7 @@ export class AccountAbstraction {
     private chainConfig: ChainConfig;
     private publicClient: PublicClient;
     private bundlerClient: BundlerClient;
-    private walletClient: WalletClient | null = null; // Local signer (optional)
+    private walletClient: WalletClient | null = null;
 
     // Services
     private tokenService: TokenService;
@@ -83,8 +75,6 @@ export class AccountAbstraction {
                 chain: this.chainConfig.chain,
                 transport: http(rpcUrl)
             });
-
-            // We don't need to switch chain for local signer, we just use the correct RPC/Chain object
 
         } else {
             // Mode 2: External Provider (MetaMask)
@@ -159,14 +149,6 @@ export class AccountAbstraction {
         return address;
     }
 
-    /**
-     * Check if the Smart Account is deployed
-     */
-    async isAccountDeployed(): Promise<boolean> {
-        if (!this.smartAccountAddress) throw new Error("Not connected");
-        return this.userOpBuilder.isAccountDeployed(this.smartAccountAddress);
-    }
-
     // --- Token Methods (Delegated) ---
 
     getTokenAddress(token: string | Address): Address {
@@ -183,9 +165,7 @@ export class AccountAbstraction {
         return this.tokenService.getBalance(token, this.owner);
     }
 
-    // Deprecated helpers maintained for compatibility
-    async getUsdcBalance(): Promise<bigint> { return this.getBalance("USDC"); }
-    async getEoaUsdcBalance(): Promise<bigint> { return this.getEoaBalance("USDC"); }
+
 
     async getAllowance(token: string | Address = "USDC"): Promise<bigint> {
         if (!this.owner || !this.smartAccountAddress) throw new Error("Not connected");
@@ -193,19 +173,6 @@ export class AccountAbstraction {
     }
 
     // --- Transactions ---
-
-    async deployAccount(): Promise<UserOpReceipt> {
-        if (!this.owner || !this.smartAccountAddress) throw new Error("Not connected");
-
-        try {
-            const userOp = await this.userOpBuilder.buildDeployUserOp(this.owner, this.smartAccountAddress);
-            const signed = await this.signUserOperation(userOp);
-            const hash = await this.sendUserOperation(signed);
-            return await this.waitForUserOperation(hash);
-        } catch (error) {
-            throw this.decodeError(error);
-        }
-    }
 
     async sendTransaction(
         tx: { target: Address; value?: bigint; data?: Hex }
@@ -247,11 +214,11 @@ export class AccountAbstraction {
                 account: this.walletClient.account!,
                 to: this.smartAccountAddress,
                 value: amount,
-                chain: this.chainConfig.chain // Explicit chain
+                chain: this.chainConfig.chain
             });
         }
 
-        const txHash = await window.ethereum!.request({
+        return await window.ethereum!.request({
             method: "eth_sendTransaction",
             params: [{
                 from: this.owner,
@@ -259,7 +226,6 @@ export class AccountAbstraction {
                 value: "0x" + amount.toString(16)
             }]
         }) as Hash;
-        return txHash;
     }
 
     async transfer(
@@ -269,7 +235,6 @@ export class AccountAbstraction {
     ): Promise<UserOpReceipt> {
         const tokenAddress = this.getTokenAddress(token);
 
-        // Native Transfer check
         if (tokenAddress === "0x0000000000000000000000000000000000000000") {
             return this.sendTransaction({
                 target: recipient,
@@ -293,7 +258,7 @@ export class AccountAbstraction {
     async approveToken(
         token: Address,
         spender: Address,
-        amount: bigint = 115792089237316195423570985008687907853269984665640564039457584007913129639935n // maxUint256
+        amount: bigint = 115792089237316195423570985008687907853269984665640564039457584007913129639935n
     ): Promise<Hash | "NOT_NEEDED"> {
         if (!this.owner) throw new Error("Not connected");
 
@@ -311,7 +276,7 @@ export class AccountAbstraction {
                 });
             }
 
-            const txHash = await window.ethereum!.request({
+            return await window.ethereum!.request({
                 method: "eth_sendTransaction",
                 params: [{
                     from: this.owner,
@@ -319,7 +284,6 @@ export class AccountAbstraction {
                     data,
                 }]
             }) as Hash;
-            return txHash;
         }
 
         if (support.type === "permit") throw new Error("Permit not yet supported");
@@ -327,17 +291,6 @@ export class AccountAbstraction {
     }
 
     // --- Core Bridge to Bundler/UserOp ---
-
-    // Deprecated/Legacy but kept for compatibility or advanced usage?
-    // buildUserOperationBatch moved to internal usage mostly, but maybe exposed?
-    // If I remove them from public API, that is a BREAKING change if user used them.
-    // User requested "modularize", but usually expects same public API.
-    // I will expose them as simple delegates if needed, or assume they primarily use sendBatchTransaction.
-    // The previous implementation exposed `buildUserOperationBatch`.
-    async buildUserOperationBatch(transactions: any[]) {
-        if (!this.owner || !this.smartAccountAddress) throw new Error("Not connected");
-        return this.userOpBuilder.buildUserOperationBatch(this.owner, this.smartAccountAddress, transactions);
-    }
 
     async signUserOperation(userOp: UserOperation): Promise<UserOperation> {
         if (!this.owner) throw new Error("Not connected");
