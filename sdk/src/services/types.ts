@@ -37,7 +37,7 @@ export interface CrossChainConfig {
 }
 
 export interface BridgeContext {
-    paymentPayload: FacilitatorPaymentPayload;
+    paymentPayload?: FacilitatorPaymentPayload;
     sourceChain: ChainKey;
     destChain: ChainKey;
     sourceToken?: string;

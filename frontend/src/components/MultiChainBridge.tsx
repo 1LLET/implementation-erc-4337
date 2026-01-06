@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { formatUnits } from "viem";
-import { CHAIN_CONFIGS } from "@1llet.xyz/erc4337-gasless-sdk";
+import { CHAIN_CONFIGS, CHAIN_ID_TO_KEY } from "@1llet.xyz/erc4337-gasless-sdk";
 import { useGaslessTransfer } from "@/hooks/useGaslessTransfer";
 import { LoginView } from "./gasless/LoginView";
 import { AccountInfo } from "./gasless/AccountInfo";
@@ -45,16 +45,6 @@ export default function MultiChainBridge() {
 
     const addLog = (msg: string) => setLogs(prev => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
 
-    // Map Chain IDs to SDK Chain Keys
-    const CHAIN_ID_TO_KEY: Record<string, string> = {
-        "8453": "Base",
-        "84532": "Base",
-        "100": "GNOSIS",
-        "10": "Optimism",
-        "11155420": "Optimism",
-        "42161": "Arbitrum"
-    };
-
     const handleBridge = async () => {
         if (!facilitatorKey) {
             alert("Please enter a Facilitator Private Key");
@@ -77,9 +67,29 @@ export default function MultiChainBridge() {
         setLogs([]);
         addLog(`Starting Bridge: ${sourceKey} -> ${destKey} (${selectedTokenSym} -> ${destTokenSym})`);
 
+        // Detect Same-Chain Transfer (Direct)
+        if (sourceKey === destKey && selectedTokenSym === destTokenSym) {
+            addLog("Executing Direct Transfer (Same Chain)...");
+            try {
+                // Use the existing hook 'transfer' which handles UserOps/AA logic
+                const txHash = await transfer(recipient, amount);
+                if (txHash) {
+                    addLog("Transfer Successful!");
+                    addLog(`Tx Hash: ${txHash}`);
+                    setBridgeStatus("success");
+                } else {
+                    addLog("Error: Transfer failed (no hash returned)");
+                    setBridgeStatus("error");
+                }
+            } catch (err: any) {
+                addLog(`Transfer Error: ${err.message}`);
+                setBridgeStatus("error");
+            }
+            return;
+        }
+
         try {
             // Dynamically import to ensure it's loaded (or just use standard import if added)
-            // For now, I'll assume standard import will be added.
             const { BridgeManager } = await import("@1llet.xyz/erc4337-gasless-sdk");
             const bridgeManager = new BridgeManager();
 
@@ -93,17 +103,8 @@ export default function MultiChainBridge() {
                 facilitatorPrivateKey: facilitatorKey,
                 sourceToken: selectedTokenSym,
                 destToken: destTokenSym,
-                paymentPayload: {
-                    authorization: {
-                        from: smartAccount || "0x0",
-                        to: "0xFacilitator" as `0x${string}`,
-                        value: BigInt("10000000"),
-                        validAfter: 0n,
-                        validBefore: 9999999999n,
-                        nonce: "0x0" as `0x${string}`
-                    },
-                    signature: "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`
-                }
+                senderAddress: smartAccount || "0x0",
+                // paymentPayload removed as it is not used for CCTP/Near flows
             };
 
             const result = await bridgeManager.execute(contextPayload);

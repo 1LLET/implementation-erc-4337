@@ -28,6 +28,9 @@ export class GaslessStrategy implements BridgeStrategy {
 
     async execute(context: BridgeContext): Promise<SettleResponse> {
         const { paymentPayload, sourceChain, amount, recipient } = context;
+        if (!paymentPayload) {
+            return { success: false, errorReason: "Payment payload is required for Gasless Strategy" };
+        }
 
         // Ensure sourceChain matches FacilitatorChainKey (EVM mainly for gasless)
         // Ideally we check if it IS in FacilitatorChainKey, but for now assuming type safety via logic

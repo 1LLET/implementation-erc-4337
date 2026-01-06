@@ -34,7 +34,7 @@ export const FACILITATOR_NETWORKS: Record<string, FacilitatorNetworkConfig> = {
         messageTransmitter: "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
         rpcUrl: "https://opt-mainnet.g.alchemy.com/v2/49fUGmuW05ynCui0VEvDN" // Assuming same key works or public
     },
-    GNOSIS: {
+    Gnosis: {
         chainId: 100,
         chain: gnosis,
         usdc: "0x2a22f9c3b48403ebD92cF06fF916b322a30dB834", // EURe (or USDC on Gnosis? The user is swapping USDT -> USDC, wait. The user log says GNOSIS -> Optimism (USDT -> USDC).

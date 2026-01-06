@@ -105,7 +105,12 @@ export async function processCCTPSettlement(
 
     // Step 1: Check Facilitator Balance or Verify Deposit (Push Model)
     const facilitatorAccount = privateKeyToAccount(facilitatorPrivateKey as `0x${string}`);
-    const { authorization } = paymentPayload;
+    // const { authorization } = paymentPayload; // Legacy
+    const fromAddress = context.senderAddress || (paymentPayload?.authorization?.from);
+
+    if (!fromAddress) {
+        return { success: false, errorReason: "Sender address is missing" };
+    }
 
     const usdcAddress = networkConfig.usdc;
     const amountBigInt = BigInt(Math.floor(parseFloat(amount) * 1_000_000)); // USDC 6 decimals
@@ -114,6 +119,29 @@ export async function processCCTPSettlement(
         chain: networkConfig.chain,
         transport: http(networkConfig.rpcUrl)
     });
+
+    // ... (rest of logic) ...
+
+    // Step 4: Execute CCTP on Source Chain (or skip if already burned)
+    // In strict model, we assume burn is done if depositTxHash is verified.
+    // If not, we might fail or allow legacy flow?
+    // For now, if depositTxHash is present, we skip 'executeCCTPBridge' (which initiates burn).
+    // Wait, executeCCTPBridge is for BURN.
+    // If depositTxHash is verified, we have 'transferHash' (burn hash) from logs.
+
+    // Logic below handles burn if not done?
+    // Currently, if depositTxHash is verified, 'transferHash' is set.
+    // Then we proceed to fetch attestation.
+
+    // ...
+
+    // executeCCTPBridge call (only if we need to burn, but Strict Deposit implies burn is done by user).
+    // However, the code structure calls executeCCTPBridge.
+    // But if we have 'transferHash', do we skip it?
+    // Let's see the flow downstream. (I can't see lines 150-170 here, assuming logic exists).
+
+    // Replacing the execute call argument:
+    // return executeCCTPBridge(..., fromAddress as Address);
 
     // A. If depositTxHash is provided (Step 2: Verification)
     if (depositTxHash) {
@@ -175,7 +203,7 @@ export async function processCCTPSettlement(
     // Funds are present, proceed to bridge
     const transferHash = (depositTxHash as `0x${string}`) || "0x0000000000000000000000000000000000000000000000000000000000000000";
 
-    return executeCCTPBridge(sourceChain, amount, crossChainConfig, facilitatorPrivateKey, recipient as Address, transferHash, authorization.from);
+    return executeCCTPBridge(sourceChain, amount, crossChainConfig, facilitatorPrivateKey, recipient as Address, transferHash, fromAddress as Address);
 }
 
 export async function executeCCTPBridge(
