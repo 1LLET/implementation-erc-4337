@@ -10,6 +10,7 @@ interface AccountInfoProps {
     allowance: bigint;
     tokenSymbol: string;
     tokenDecimals: number;
+    tokenValueFormatted?: string | null;
 }
 
 export function AccountInfo({
@@ -21,11 +22,20 @@ export function AccountInfo({
     allowance,
     tokenSymbol,
     tokenDecimals,
+    tokenValueFormatted,
 }: AccountInfoProps) {
     const truncateAddress = (addr: string) =>
         `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
-    const formatToken = (amount: bigint) => formatUnits(amount, tokenDecimals);
+    const formatToken = (amount: bigint) => {
+        const val = formatUnits(amount, tokenDecimals);
+        // Limit to 6 decimals max
+        const pointIndex = val.indexOf('.');
+        if (pointIndex !== -1 && val.length > pointIndex + 7) {
+            return val.slice(0, pointIndex + 7);
+        }
+        return val;
+    };
 
     const hasInfinite = allowance > maxUint256 / 2n;
 
@@ -53,9 +63,16 @@ export function AccountInfo({
                 <p className="text-xl font-semibold">
                     {hasInfinite ? formatToken(eoaBalance) : formatToken(balance)} {tokenSymbol}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
-                    {hasInfinite ? "(From your EOA)" : "(From Smart Account)"}
-                </p>
+                <div className="flex flex-col">
+                    <p className="text-xs text-gray-500 mt-1">
+                        {hasInfinite ? "(From your EOA)" : "(From Smart Account)"}
+                    </p>
+                    {tokenValueFormatted && (
+                        <p className="text-xs text-gray-400 font-mono mt-0.5">
+                            {tokenValueFormatted}
+                        </p>
+                    )}
+                </div>
             </div>
         </div>
     );

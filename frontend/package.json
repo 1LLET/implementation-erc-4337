@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@1llet.xyz/erc4337-gasless-sdk": "^0.4.47",
+    "@1llet.xyz/sdk-currency": "file:../sdk-currency/1llet.xyz-sdk-currency-0.1.1.tgz",
     "@tanstack/react-query": "^5.17.0",
     "mongoose": "^8.21.0",
     "next": "14.1.0",

@@ -1,10 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { formatUnits } from "viem";
 import { CHAIN_CONFIGS, CHAIN_ID_TO_KEY, getNearSimulation } from "@1llet.xyz/erc4337-gasless-sdk";
 import { useGaslessTransfer } from "@/hooks/useGaslessTransfer";
 import { LoginView } from "./gasless/LoginView";
 import { AccountInfo } from "./gasless/AccountInfo";
+import { useLocalCurrency } from "@/hooks/useLocalCurrency";
 
 export default function MultiChainBridge() {
     // Bridge State
@@ -46,6 +47,18 @@ export default function MultiChainBridge() {
         transfer
     } = useGaslessTransfer();
 
+    // Local Currency Hook: combine source and dest tokens
+    const destTokens = CHAIN_CONFIGS[parseInt(destChain)]?.tokens || [];
+
+    // Memoize to prevent infinite loop in useLocalCurrency
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const allTokens = useMemo(() => {
+        // Combine arrays efficiently
+        return [...availableTokens, ...destTokens.filter((dt: any) => !availableTokens.some(st => st.symbol === dt.symbol))];
+    }, [availableTokens, destTokens]);
+
+    const { getValue, currency: localSimbol } = useLocalCurrency(allTokens);
+
     const chains = Object.keys(CHAIN_CONFIGS);
 
     const addLog = (msg: string) => setLogs(prev => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
@@ -64,9 +77,21 @@ export default function MultiChainBridge() {
         const destKey = CHAIN_ID_TO_KEY[destChain];
 
         // Only simulate if chains are mapped
+        // Only simulate if chains are mapped
         if (!sourceKey || !destKey) return;
 
-
+        // SPECIAL CASE: Same Chain + Same Token = Direct Transfer (No Bridge Fee)
+        if (sourceChain === destChain && selectedTokenSym === destTokenSym) {
+            setSimResult({
+                success: true,
+                netAmountBridged: amount,
+                protocolFee: "0",
+                estimatedReceived: amount,
+                minAmount: "0"
+            });
+            setSimLoading(false);
+            return;
+        }
 
         setSimLoading(true);
         setSimError(null);
@@ -291,6 +316,16 @@ export default function MultiChainBridge() {
                                             allowance={allowance}
                                             tokenSymbol={selectedTokenSym}
                                             tokenDecimals={selectedToken?.decimals || 6}
+                                            tokenValueFormatted={(() => {
+                                                const bal = walletStatus === "connected" ?
+                                                    (allowance > BigInt("57896044618658097711785492504343953926634992332820282019728792003956564819968") / 2n
+                                                        ? formatUnits(eoaBalance, selectedToken?.decimals || 6)
+                                                        : formatUnits(balance, selectedToken?.decimals || 6))
+                                                    : "0";
+
+                                                const val = getValue(bal, (selectedToken as any)?.coingeckoId);
+                                                return val ? val.formatted : null;
+                                            })()}
                                         />
                                         <button
                                             onClick={disconnect}
@@ -340,7 +375,7 @@ export default function MultiChainBridge() {
                                             value={selectedChain}
                                             onChange={(e) => {
                                                 setSelectedChain(e.target.value);
-                                                // Also update local for API usage if needed, or better, remove local sourceChain
+                                                // Also update local for APIs, although better to use one.
                                                 setSourceChain(e.target.value);
                                             }}
                                             className="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white"
@@ -416,15 +451,33 @@ export default function MultiChainBridge() {
                                     </div>
 
                                     <div className="flex justify-between items-end mb-1">
-                                        <label className="block text-sm text-gray-400">Amount ({selectedTokenSym})</label>
+                                        <label className="block text-sm text-gray-400">
+                                            Amount ({selectedTokenSym})
+                                            {amount && !isNaN(parseFloat(amount)) && (
+                                                <span className="text-gray-500 ml-2 font-mono text-xs">
+                                                    {(() => {
+                                                        const val = getValue(amount, (selectedToken as any)?.coingeckoId);
+                                                        return val ? val.formatted : "";
+                                                    })()}
+                                                </span>
+                                            )}
+                                        </label>
                                         <div className="text-xs text-right">
                                             {walletStatus === "connected" ? (
                                                 <div className="flex flex-col">
                                                     <span className="text-gray-500">
                                                         SA: <span className="text-white font-mono">{formatUnits(balance, selectedToken?.decimals || 18)}</span>
+                                                        {(() => {
+                                                            const val = getValue(formatUnits(balance, selectedToken?.decimals || 18), (selectedToken as any)?.coingeckoId);
+                                                            return val ? <div className="text-[10px] text-gray-400 font-mono text-right">{val.formatted}</div> : null;
+                                                        })()}
                                                     </span>
-                                                    <span className="text-gray-500">
+                                                    <span className="text-gray-500 mt-1">
                                                         EOA: <span className="text-white font-mono">{formatUnits(eoaBalance, selectedToken?.decimals || 18)}</span>
+                                                        {(() => {
+                                                            const val = getValue(formatUnits(eoaBalance, selectedToken?.decimals || 18), (selectedToken as any)?.coingeckoId);
+                                                            return val ? <div className="text-[10px] text-gray-400 font-mono text-right">{val.formatted}</div> : null;
+                                                        })()}
                                                     </span>
                                                 </div>
                                             ) : (
@@ -511,7 +564,15 @@ export default function MultiChainBridge() {
                                                 </div>
                                                 <div className="flex justify-between pt-1 border-t border-gray-600">
                                                     <span className="text-green-400 font-bold">Est. Received:</span>
-                                                    <span className="text-green-300 font-mono font-bold">~{simResult.estimatedReceived} {destTokenSym}</span>
+                                                    <div className="flex flex-col items-end">
+                                                        <span className="text-green-300 font-mono font-bold">~{simResult.estimatedReceived} {destTokenSym}</span>
+                                                        {(() => {
+                                                            // Use allTokens to find the token object as it has the combined list used by useLocalCurrency
+                                                            const destTokenObj = allTokens.find((t: any) => t.symbol === destTokenSym);
+                                                            const val = getValue(simResult.estimatedReceived, (destTokenObj as any)?.coingeckoId);
+                                                            return val ? <span className="text-[10px] text-green-500 font-mono">{val.formatted}</span> : null;
+                                                        })()}
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
@@ -520,7 +581,6 @@ export default function MultiChainBridge() {
 
                             </div>
                         </section>
-
                         <button
                             onClick={handleBridge}
                             disabled={bridgeStatus === "bridging" || walletStatus !== "connected" || (!!simError && !simLoading)} // Disable if sim error
