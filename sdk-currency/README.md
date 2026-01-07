@@ -1,0 +1,52 @@
+# Currency SDK 💰
+
+A standalone SDK for fetching crypto/fiat prices and performing conversions using CoinGecko.
+
+## 📦 Installation
+
+```bash
+npm install @1llet.xyz/sdk-currency
+```
+
+## 🚀 Usage
+
+### Initialize
+
+```typescript
+import { PriceService } from "@1llet.xyz/sdk-currency";
+
+const service = new PriceService();
+```
+
+### 1. Get Bulk Prices
+
+Fetch multiple prices at once.
+
+```typescript
+const prices = await service.getPrices(
+    ["bitcoin", "ethereum", "tether", "usd-coin"], 
+    ["usd", "eur", "ars"]
+);
+
+console.log(prices.bitcoin.usd); // 95000
+console.log(prices.ethereum.ars); // ...
+```
+
+### 2. Get Price & Convert
+
+Fetch a single price and calculate the value of an amount.
+
+```typescript
+// Example: Get value of 10 USDT in Argentine Peso (ARS)
+const result = await service.getPrice("tether", "ars", "10");
+
+console.log(`Rate: 1 USDT = ${result.price} ARS`);
+console.log(`Total Value: ${result.value} ARS`);
+/* Output:
+{
+  price: 1200,
+  value: 12000,
+  currency: 'ars'
+}
+*/
+```

@@ -33,7 +33,6 @@
     "license": "MIT",
     "dependencies": {
         "@defuse-protocol/one-click-sdk-typescript": "^0.1.15",
-        "axios": "^1.13.2",
         "stellar-sdk": "^13.3.0",
         "viem": "^2.17.0"
     },
