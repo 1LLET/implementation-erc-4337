@@ -26,17 +26,37 @@ export class PriceService {
     }
 
     /**
+     * Detect user's currency based on IP address.
+     * Uses ipapi.co for geolocation.
+     */
+    async detectCurrency(): Promise<string> {
+        try {
+            const response = await axios.get("https://ipapi.co/json/");
+            return response.data.currency?.toLowerCase() || "usd";
+        } catch (error) {
+            console.warn("Currency detection failed, defaulting to USD");
+            return "usd";
+        }
+    }
+
+    /**
      * Get price for a single token and optionally calculate value for an amount.
      * @param id CoinGecko ID (e.g. 'tether')
-     * @param currency Target currency (e.g. 'ars', 'usd')
+     * @param currency Target currency (e.g. 'ars', 'usd', 'auto'). Defaults to 'usd'.
      * @param amount Optional amount to convert (e.g. '10')
      */
-    async getPrice(id: string, currency: string, amount?: string | number) {
-        const prices = await this.getPrices([id], [currency]);
-        const price = prices[id]?.[currency];
+    async getPrice(id: string, currency: string = "usd", amount?: string | number) {
+        let targetCurrency = currency.toLowerCase();
+
+        if (targetCurrency === "auto") {
+            targetCurrency = await this.detectCurrency();
+        }
+
+        const prices = await this.getPrices([id], [targetCurrency]);
+        const price = prices[id]?.[targetCurrency];
 
         if (price === undefined) {
-            throw new Error(`Price not found for ${id} in ${currency}`);
+            throw new Error(`Price not found for ${id} in ${targetCurrency}`);
         }
 
         if (amount !== undefined) {
@@ -46,10 +66,10 @@ export class PriceService {
             return {
                 price,
                 value: numericAmount * price,
-                currency
+                currency: targetCurrency
             };
         }
 
-        return { price, currency };
+        return { price, currency: targetCurrency };
     }
 }

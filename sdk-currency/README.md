@@ -42,11 +42,13 @@ const result = await service.getPrice("tether", "ars", "10");
 
 console.log(`Rate: 1 USDT = ${result.price} ARS`);
 console.log(`Total Value: ${result.value} ARS`);
-/* Output:
-{
-  price: 1200,
-  value: 12000,
-  currency: 'ars'
-}
-*/
+
+// 3. Auto-Detect Currency
+// Detects user's currency from IP (e.g. if in UK -> GBP)
+const autoResult = await service.getPrice("bitcoin", "auto");
+console.log(`BTC Price in local currency: ${autoResult.price} ${autoResult.currency.toUpperCase()}`);
+
+// 4. Default Currency (USD)
+const usdResult = await service.getPrice("ethereum"); // Defaults to 'usd'
+console.log(`ETH Price in USD: ${usdResult.price}`);
 ```
