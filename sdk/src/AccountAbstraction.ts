@@ -59,14 +59,10 @@ export class AccountAbstraction {
         this.userOpBuilder = new UserOpBuilder(chainConfig, this.bundlerClient, this.publicClient);
     }
 
-    /**
-     * Connect to MetaMask OR use Private Key
-     * @param privateKey (Optional) Hex string of private key. If provided, uses local signing.
-     */
-    async connect(privateKey?: Hex): Promise<{ owner: Address; smartAccount: Address }> {
+    async connect(signer?: Hex | WalletClient): Promise<{ owner: Address; smartAccount: Address }> {
         // Mode 1: Private Key (Local Signer)
-        if (privateKey) {
-            const account: LocalAccount = privateKeyToAccount(privateKey);
+        if (typeof signer === 'string') {
+            const account: LocalAccount = privateKeyToAccount(signer);
             this.owner = account.address;
 
             const rpcUrl = this.chainConfig.rpcUrl || this.chainConfig.chain.rpcUrls.default.http[0];
@@ -76,8 +72,14 @@ export class AccountAbstraction {
                 transport: http(rpcUrl)
             });
 
+        } else if (signer && typeof signer === 'object') {
+            // Mode 2: External Wallet Client (e.g. Wagmi)
+            this.walletClient = signer as WalletClient;
+            if (!this.walletClient.account) throw new Error("WalletClient must have an account");
+            this.owner = this.walletClient.account.address;
+
         } else {
-            // Mode 2: External Provider (MetaMask)
+            // Mode 3: External Provider (MetaMask window.ethereum)
             if (typeof window === "undefined" || !window.ethereum) {
                 throw new Error("MetaMask is not installed and no private key provided");
             }
