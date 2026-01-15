@@ -1,0 +1,3 @@
+check balance = npx hardhat run check-paymaster.ts --network gnosis
+deployar = npx hardhat run deploy-complete.ts --network polygon
+depositar en paymaster = npx hardhat run deposit-to-paymaster.ts --network polygon

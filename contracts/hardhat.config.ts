@@ -15,7 +15,9 @@ import {
   monad
 } from "viem/chains";
 
-dotenv.config();
+import * as path from "path";
+
+dotenv.config({ path: path.join(__dirname, ".env") });
 
 
 const config: HardhatUserConfig = {
@@ -64,9 +66,10 @@ const config: HardhatUserConfig = {
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
     avalanche: {
-      url: process.env.AVALANCHE_RPC || avalanche.rpcUrls.default.http[0],
+      url: process.env.AVALANCHE_RPC || "https://api.avax.network/ext/bc/C/rpc",
       chainId: avalanche.id,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      gasPrice: 25000000000, // 25 gwei
     },
     arbitrum: {
       url: process.env.ARBITRUM_RPC || arbitrum.rpcUrls.default.http[0],

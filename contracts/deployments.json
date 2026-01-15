@@ -13,5 +13,35 @@
     "SponsorPaymaster": "0x0dB771d11F84E8541AA651363DF14E4401d01216",
     "SmartAccountFactory": "0x3CE963866d3Be7Fe4354DBe892Aab52a0a18aeb2",
     "EntryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+  },
+  "polygon": {
+    "SponsorPaymaster": "0x24C82C9381F4615f1a73a5CdBB0Ffd5a432fA54C",
+    "SmartAccountFactory": "0x31D1C59fcf5B78FE2a86187a53c84DcDa5B80EF6",
+    "EntryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+  },
+  "bsc": {
+    "SponsorPaymaster": "0x460593321DdbE4e1038666Ad07Fc1F817dfA02DB",
+    "SmartAccountFactory": "0x2d5dBD90d3aB35614cdf686a67A9889E56B20b27",
+    "EntryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+  },
+  "unichain": {
+    "SponsorPaymaster": "0x7A92b3Fee017E3E181a51D9045AACE30eC2B387D",
+    "SmartAccountFactory": "0xB2E45aCbB68f3e98C87B6df16625f22e11728556",
+    "EntryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+  },
+  "arbitrum": {
+    "SponsorPaymaster": "0x41d236E76eCEC3b90554d0b504ac2EEce93A2AE1",
+    "SmartAccountFactory": "0xEEba846e0177CD7b2F023feaa44F9B2a9183327A",
+    "EntryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+  },
+  "monad": {
+    "SponsorPaymaster": "0xeA82B63e8dE3BFBd321A681D4511BC596E323162",
+    "SmartAccountFactory": "0xaaeA6D8f377e62599Aad75376F0C5e4F7EBF8f84",
+    "EntryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+  },
+  "avalanche": {
+    "SponsorPaymaster": "0x6c0de464F2203FE089FF719Acf425dFfE6ac1EE5",
+    "SmartAccountFactory": "0x5D1D71FE2De5D1C52c7c11311332eC7f0CBf88aF",
+    "EntryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
   }
 }

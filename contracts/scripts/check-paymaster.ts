@@ -1,8 +1,27 @@
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
+import * as fs from "fs";
+import * as path from "path";
 
 async function main() {
-  const PAYMASTER_ADDRESS = "0xE4D1ab09814c07C580B4C2c3d4dc9C3110D57F54";
-  const ENTRYPOINT_ADDRESS = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
+  const deploymentsPath = path.join(__dirname, "../deployments.json");
+  if (!fs.existsSync(deploymentsPath)) {
+    throw new Error("deployments.json not found");
+  }
+
+  const deployments = JSON.parse(fs.readFileSync(deploymentsPath, "utf8"));
+  const networkName = network.name;
+
+  if (!deployments[networkName] || !deployments[networkName]["SponsorPaymaster"]) {
+    throw new Error(`SponsorPaymaster not found for network: ${networkName}`);
+  }
+
+  const PAYMASTER_ADDRESS = deployments[networkName]["SponsorPaymaster"];
+  // Use configured EntryPoint or default
+  const ENTRYPOINT_ADDRESS = deployments[networkName]["EntryPoint"] || "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
+
+  console.log(`Checking Paymaster on ${networkName}`);
+  console.log(`Paymaster Address: ${PAYMASTER_ADDRESS}`);
+  console.log(`EntryPoint Address: ${ENTRYPOINT_ADDRESS}`);
 
   const paymaster = await ethers.getContractAt("SponsorPaymaster", PAYMASTER_ADDRESS);
   const entryPoint = await ethers.getContractAt(

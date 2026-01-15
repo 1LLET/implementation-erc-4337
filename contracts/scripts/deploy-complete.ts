@@ -22,7 +22,7 @@ async function main() {
     // 1. Deploy SmartAccountFactory
     console.log("\n1. Deploying SmartAccountFactory...");
     const SmartAccountFactory = await ethers.getContractFactory("SmartAccountFactory");
-    const factory = await SmartAccountFactory.deploy(ENTRYPOINT_ADDRESS, { nonce: nonce++ });
+    const factory = await SmartAccountFactory.deploy(ENTRYPOINT_ADDRESS);
     await factory.waitForDeployment();
     const factoryAddress = await factory.getAddress();
     console.log("   ✅ SmartAccountFactory deployed to:", factoryAddress);
@@ -30,7 +30,7 @@ async function main() {
     // 2. Deploy SponsorPaymaster
     console.log("\n2. Deploying SponsorPaymaster...");
     const SponsorPaymaster = await ethers.getContractFactory("SponsorPaymaster");
-    const paymaster = await SponsorPaymaster.deploy(ENTRYPOINT_ADDRESS, { nonce: nonce++ });
+    const paymaster = await SponsorPaymaster.deploy(ENTRYPOINT_ADDRESS);
     await paymaster.waitForDeployment();
     const paymasterAddress = await paymaster.getAddress();
     console.log("   ✅ SponsorPaymaster deployed to:", paymasterAddress);
@@ -38,16 +38,17 @@ async function main() {
 
 
     // 3. Fund Paymaster (Base & Gnosis)
-    if (network.name === "base" || network.name === "optimism") {
-        console.log("\n3. Funding Paymaster (0.00002 ETH)...");
+    if (network.name === "avalanche" || network.name === "optimism") {
+        console.log("\n3. Funding Paymaster...");
         try {
-            const fundAmount = ethers.parseEther("0.00002");
+            const fundAmount = ethers.parseEther("0.02");
             console.log(`   Attempting to deposit ${ethers.formatEther(fundAmount)} ETH...`);
 
             // Check if deployer has enough balance
             const balance = await ethers.provider.getBalance(deployer.address);
-            if (balance > fundAmount * 2n) {
-                const depositTx = await paymaster.deposit({ value: fundAmount, nonce: nonce++ });
+            // Leave 0.01 ETH for gas (adjusted for BSC lower costs usually, but safe margin)
+            if (balance > fundAmount) {
+                const depositTx = await paymaster.deposit({ value: fundAmount });
                 await depositTx.wait();
                 console.log("   ✅ Deposited:", ethers.formatEther(fundAmount), "ETH");
             } else {
