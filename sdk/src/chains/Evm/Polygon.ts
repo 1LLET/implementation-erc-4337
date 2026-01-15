@@ -29,6 +29,9 @@ export const POLYGON: ChainConfig = {
         rpcUrl: "https://polygon-mainnet.g.alchemy.com/v2/49fUGmuW05ynCui0VEvDN",
         supports7702: true,
         erc4337: false,
+        entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+        factoryAddress: "0x31D1C59fcf5B78FE2a86187a53c84DcDa5B80EF6",
+        paymasterAddress: "0x24C82C9381F4615f1a73a5CdBB0Ffd5a432fA54C",
     },
     crossChainInformation: {
         circleInformation: {

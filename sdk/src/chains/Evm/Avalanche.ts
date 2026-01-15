@@ -28,6 +28,9 @@ export const AVALANCHE: ChainConfig = {
         rpcUrl: avalanche.rpcUrls.default.http[0],
         supports7702: false,
         erc4337: false,
+        entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+        factoryAddress: "0x5D1D71FE2De5D1C52c7c11311332eC7f0CBf88aF",
+        paymasterAddress: "0x6c0de464F2203FE089FF719Acf425dFfE6ac1EE5",
     },
     crossChainInformation: {
         circleInformation: {

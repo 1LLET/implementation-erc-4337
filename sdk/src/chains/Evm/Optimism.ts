@@ -37,7 +37,7 @@ export const OPTIMISM: ChainConfig = {
         bundlerUrl: `${BUNDLER_URL}/rpc?chain=optimism`,
         entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
         factoryAddress: "0x3CE963866d3Be7Fe4354DBe892Aab52a0a18aeb2",
-        paymasterAddress: "0x0dB771d11F84E8541AA651363DF14E4401d01216"
+        paymasterAddress: "0x0dB771d11F84E8541AA651363DF14E4401d01216",
     },
     crossChainInformation: {
         circleInformation: {

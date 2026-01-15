@@ -34,6 +34,9 @@ export const ARBITRUM: ChainConfig = {
         rpcUrl: "https://arb-mainnet.g.alchemy.com/v2/49fUGmuW05ynCui0VEvDN",
         supports7702: true,
         erc4337: false,
+        entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+        factoryAddress: "0xEEba846e0177CD7b2F023feaa44F9B2a9183327A",
+        paymasterAddress: "0x41d236E76eCEC3b90554d0b504ac2EEce93A2AE1",
     },
     crossChainInformation: {
         circleInformation: {

@@ -28,6 +28,9 @@ export const BNB: ChainConfig = {
         rpcUrl: "https://bsc-dataseed.binance.org",
         supports7702: true,
         erc4337: false,
+        entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+        factoryAddress: "0x2d5dBD90d3aB35614cdf686a67A9889E56B20b27",
+        paymasterAddress: "0x460593321DdbE4e1038666Ad07Fc1F817dfA02DB",
     },
     crossChainInformation: {
         circleInformation: {
