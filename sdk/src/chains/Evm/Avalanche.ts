@@ -1,4 +1,4 @@
-
+import { BUNDLER_URL } from "../../constants/bundler";
 import { avalanche } from "viem/chains";
 import { ChainConfig } from "../../types/chain.js";
 
@@ -27,6 +27,7 @@ export const AVALANCHE: ChainConfig = {
         chain: avalanche,
         rpcUrl: avalanche.rpcUrls.default.http[0],
         supports7702: false,
+        bundlerUrl: `${BUNDLER_URL}/rpc?chain=avalanche`,
         erc4337: false,
         entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
         factoryAddress: "0x5D1D71FE2De5D1C52c7c11311332eC7f0CBf88aF",

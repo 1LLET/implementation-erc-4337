@@ -1,4 +1,4 @@
-
+import { BUNDLER_URL } from "../../constants/bundler";
 import { arbitrum } from "viem/chains";
 import { ChainConfig } from "../../types/chain.js";
 
@@ -32,6 +32,7 @@ export const ARBITRUM: ChainConfig = {
     evm: {
         chain: arbitrum,
         rpcUrl: "https://arb-mainnet.g.alchemy.com/v2/49fUGmuW05ynCui0VEvDN",
+        bundlerUrl: `${BUNDLER_URL}/rpc?chain=arbitrum`,
         supports7702: true,
         erc4337: false,
         entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",

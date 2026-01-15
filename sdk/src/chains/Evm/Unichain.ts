@@ -1,6 +1,5 @@
-
+import { BUNDLER_URL } from "../../constants/bundler";
 import { unichain } from "viem/chains";
-import { Address } from "abitype";
 import { ChainConfig } from "../../types/chain.js";
 
 export const UNICHAIN: ChainConfig = {
@@ -15,6 +14,7 @@ export const UNICHAIN: ChainConfig = {
     evm: {
         chain: unichain,
         rpcUrl: "https://unichain-mainnet.g.alchemy.com/v2/49fUGmuW05ynCui0VEvDN",
+        bundlerUrl: `${BUNDLER_URL}/rpc?chain=unichain`,
         supports7702: true,
         erc4337: false,
         entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",

@@ -1,6 +1,5 @@
-
 import { monad } from "viem/chains";
-import { Address } from "abitype";
+import { BUNDLER_URL } from "../../constants/bundler";
 import { ChainConfig } from "../../types/chain.js";
 
 export const Monad: ChainConfig = {
@@ -29,6 +28,7 @@ export const Monad: ChainConfig = {
         rpcUrl: monad.rpcUrls.default.http[0],
         supports7702: true,
         erc4337: false,
+        bundlerUrl: `${BUNDLER_URL}/rpc?chain=monad`,
         entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
         factoryAddress: "0xaaeA6D8f377e62599Aad75376F0C5e4F7EBF8f84",
         paymasterAddress: "0xeA82B63e8dE3BFBd321A681D4511BC596E323162",

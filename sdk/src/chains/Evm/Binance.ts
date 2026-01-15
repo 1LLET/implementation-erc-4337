@@ -1,4 +1,4 @@
-
+import { BUNDLER_URL } from "../../constants/bundler";
 import { bsc } from "viem/chains";
 import { ChainConfig } from "../../types/chain.js";
 
@@ -27,6 +27,7 @@ export const BNB: ChainConfig = {
         chain: bsc,
         rpcUrl: "https://bsc-dataseed.binance.org",
         supports7702: true,
+        bundlerUrl: `${BUNDLER_URL}/rpc?chain=bsc`,
         erc4337: false,
         entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
         factoryAddress: "0x2d5dBD90d3aB35614cdf686a67A9889E56B20b27",
