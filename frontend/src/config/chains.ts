@@ -15,13 +15,14 @@ function configureChain(sdkChain: ChainConfig, chainKey: string) {
         ? `${envBundler}/rpc?chain=${chainKey}`
         : chainAny.evm?.bundlerUrl || chainAny.bundlerUrl; // Support both location if changed in SDK or spread
 
-    // Map SDK 'assets' (name) to Frontend 'tokens' (symbol)
-    // and ensure coingeckoId is passed through
-    const tokens = (chainAny.assets || []).map((asset: any) => ({
-        symbol: asset.name,
-        decimals: asset.decimals,
-        address: asset.address,
-        coingeckoId: asset.coingeckoId
+    // Map SDK 'assets' (name) or 'tokens' (symbol) to Frontend 'tokens'
+    // and ensure coingeckoId is passed through if available
+    const source = chainAny.assets || chainAny.tokens || [];
+    const tokens = source.map((item: any) => ({
+        symbol: item.name || item.symbol,
+        decimals: item.decimals,
+        address: item.address,
+        coingeckoId: item.coingeckoId
     }));
 
     return {

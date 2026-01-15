@@ -30,7 +30,7 @@ export class BundlerClient {
     }
 
     async estimateGas(userOp: Partial<UserOperation>): Promise<GasEstimate> {
-        return await this.call("eth_estimateUserOperationGas", [
+        const result = await this.call("eth_estimateUserOperationGas", [
             {
                 sender: userOp.sender,
                 nonce: userOp.nonce ? "0x" + userOp.nonce.toString(16) : "0x0",
@@ -41,6 +41,17 @@ export class BundlerClient {
             },
             this.entryPointAddress,
         ]);
+
+        console.log("DEBUG: estimateGas result:", result);
+
+        return {
+            callGasLimit: result.callGasLimit,
+            verificationGasLimit: result.verificationGasLimit,
+            preVerificationGas: result.preVerificationGas,
+            maxFeePerGas: result.maxFeePerGas,
+            maxPriorityFeePerGas: result.maxPriorityFeePerGas,
+            paymasterAndData: result.paymasterAndData,
+        };
     }
 
     async sendUserOperation(userOp: UserOperation): Promise<Hash> {

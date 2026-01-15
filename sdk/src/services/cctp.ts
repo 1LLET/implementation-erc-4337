@@ -225,7 +225,7 @@ export async function executeCCTPBridge(
     const amountBigInt = BigInt(Math.floor(parseFloat(amount) * 1_000_000));
     const feeRaw = calculateFee();
     const fee = BigInt(Math.floor(feeRaw * 1_000_000));
-    const minRequired = fee * BigInt(2);
+    const minRequired = fee;
 
     if (amountBigInt <= minRequired) {
         return {
@@ -297,7 +297,7 @@ export async function executeCCTPBridge(
             abi: tokenMessengerAbi,
             functionName: "depositForBurn",
             args: [
-                amountBigInt - (fee * BigInt(2)), // Deduct 0.02 USDC Fee (2x Base Fee)
+                amountBigInt - fee, // Deduct 0.02 USDC Fee
                 crossChainConfig.destinationDomain,
                 mintRecipient,
                 networkConfig.usdc,

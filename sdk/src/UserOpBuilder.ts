@@ -26,8 +26,8 @@ export class UserOpBuilder {
         this.bundlerClient = bundlerClient;
         this.publicClient = publicClient;
 
-        this.entryPointAddress = chainConfig.entryPointAddress!;
-        this.factoryAddress = chainConfig.factoryAddress!;
+        this.entryPointAddress = (chainConfig as any).entryPointAddress!;
+        this.factoryAddress = (chainConfig as any).factoryAddress!;
     }
 
     async getNonce(smartAccountAddress: Address): Promise<bigint> {
@@ -80,7 +80,7 @@ export class UserOpBuilder {
             nonce,
             initCode: initCode as Hex,
             callData,
-            paymasterAndData: (this.chainConfig.paymasterAddress || "0x") as Hex,
+            paymasterAndData: ((this.chainConfig as any).paymasterAddress || "0x") as Hex,
         };
 
         const gasEstimate = await this.bundlerClient.estimateGas(partialOp);
@@ -92,6 +92,7 @@ export class UserOpBuilder {
             preVerificationGas: BigInt(gasEstimate.preVerificationGas),
             maxFeePerGas: BigInt(gasEstimate.maxFeePerGas),
             maxPriorityFeePerGas: BigInt(gasEstimate.maxPriorityFeePerGas),
+            paymasterAndData: (gasEstimate.paymasterAndData || partialOp.paymasterAndData) as Hex,
             signature: "0x",
         };
     }
@@ -112,7 +113,7 @@ export class UserOpBuilder {
             nonce,
             initCode: initCode as Hex,
             callData: callData as Hex,
-            paymasterAndData: (this.chainConfig.paymasterAddress || "0x") as Hex,
+            paymasterAndData: ((this.chainConfig as any).paymasterAddress || "0x") as Hex,
         };
 
         const gasEstimate = await this.bundlerClient.estimateGas(partialOp);
@@ -124,6 +125,7 @@ export class UserOpBuilder {
             preVerificationGas: BigInt(gasEstimate.preVerificationGas),
             maxFeePerGas: BigInt(gasEstimate.maxFeePerGas),
             maxPriorityFeePerGas: BigInt(gasEstimate.maxPriorityFeePerGas),
+            paymasterAndData: (gasEstimate.paymasterAndData || partialOp.paymasterAndData) as Hex,
             signature: "0x",
         };
     }

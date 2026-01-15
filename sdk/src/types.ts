@@ -49,6 +49,7 @@ export interface GasEstimate {
     preVerificationGas: string;
     maxFeePerGas: string;
     maxPriorityFeePerGas: string;
+    paymasterAndData?: string;
 }
 
 export interface UserOpReceipt {
