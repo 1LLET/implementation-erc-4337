@@ -371,8 +371,12 @@ export async function executeCCTPBridge(
             abi: messageTransmitterAbi,
             functionName: "receiveMessage",
             args: [
-                attestationResponse.message as `0x${string}`,
-                attestationResponse.attestation as `0x${string}`
+                attestationResponse.message.startsWith("0x")
+                    ? attestationResponse.message as `0x${string}`
+                    : `0x${attestationResponse.message}` as `0x${string}`,
+                attestationResponse.attestation.startsWith("0x")
+                    ? attestationResponse.attestation as `0x${string}`
+                    : `0x${attestationResponse.attestation}` as `0x${string}`
             ]
         });
 

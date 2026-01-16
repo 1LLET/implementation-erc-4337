@@ -1,6 +1,5 @@
 
-import { Address } from "viem";
-import { base, optimism, gnosis, arbitrum, polygon } from "viem/chains";
+import { base, optimism, gnosis, arbitrum, polygon, unichain, avalanche, worldchain, monad } from "viem/chains";
 import { ChainKey } from "@/types/chain";
 import { FacilitatorNetworkConfig } from "@/services/config";
 
@@ -47,12 +46,10 @@ export const FACILITATOR_NETWORKS: Record<string, FacilitatorNetworkConfig> = {
     Gnosis: {
         chainId: 100,
         chain: gnosis,
-        usdc: "0x2a22f9c3b48403ebD92cF06fF916b322a30dB834", // EURe (or USDC on Gnosis? The user is swapping USDT -> USDC, wait. The user log says GNOSIS -> Optimism (USDT -> USDC).
-        // For verification, we just need RPC. The 'usdc' field is for CCTP, but verify logic just needs `rpcUrl`.
-        // I will populate others as placeholders if unknown.
-        usdcName: "USDC", // Placeholder
+        usdc: "0x2a22f9c3b48403ebD92cF06fF916b322a30dB834",
+        usdcName: "USDC",
         usdcVersion: "2",
-        domain: 0, // Placeholder
+        domain: 0,
         tokenMessenger: "0x0000000000000000000000000000000000000000",
         messageTransmitter: "0x0000000000000000000000000000000000000000",
         rpcUrl: "https://rpc.gnosischain.com"
@@ -64,8 +61,8 @@ export const FACILITATOR_NETWORKS: Record<string, FacilitatorNetworkConfig> = {
         usdcName: "USD Coin",
         usdcVersion: "2",
         domain: 3,
-        tokenMessenger: "0x19330d10D9Cc8751218eaf51E8885D058642E08A",
-        messageTransmitter: "0xC30362313FBBA5cf9163F0bb16a0e01f01A896ca",
+        tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+        messageTransmitter: "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
         rpcUrl: "https://arb-mainnet.g.alchemy.com/v2/49fUGmuW05ynCui0VEvDN"
     },
     Polygon: {
@@ -74,9 +71,53 @@ export const FACILITATOR_NETWORKS: Record<string, FacilitatorNetworkConfig> = {
         usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
         usdcName: "USD Coin",
         usdcVersion: "2",
-        domain: 7, // Placeholder? CCTP domain for Polygon is 7? I should check if I had it elsewhere.
-        tokenMessenger: "0x0000000000000000000000000000000000000000",
-        messageTransmitter: "0x0000000000000000000000000000000000000000",
+        domain: 7,
+        tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+        messageTransmitter: "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
         rpcUrl: "https://polygon-mainnet.g.alchemy.com/v2/49fUGmuW05ynCui0VEvDN"
+    },
+    Unichain: {
+        chainId: unichain.id,
+        chain: unichain,
+        usdc: "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
+        usdcName: "USD Coin",
+        usdcVersion: "2",
+        domain: 10,
+        tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+        messageTransmitter: "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
+        rpcUrl: unichain.rpcUrls.default.http[0]
+    },
+    Avalanche: {
+        chainId: avalanche.id,
+        chain: avalanche,
+        usdc: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+        usdcName: "USD Coin",
+        usdcVersion: "2",
+        domain: 1,
+        tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+        messageTransmitter: "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
+        rpcUrl: avalanche.rpcUrls.default.http[0]
+    },
+    Worldchain: {
+        chainId: worldchain.id,
+        chain: worldchain,
+        usdc: "0x79A02482A880bCe3F13E09da970dC34dB4cD24D1",
+        usdcName: "USD Coin",
+        usdcVersion: "2",
+        domain: 13,
+        tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+        messageTransmitter: "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
+        rpcUrl: worldchain.rpcUrls.default.http[0]
+    },
+    Monad: {
+        chainId: monad.id,
+        chain: monad,
+        usdc: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+        usdcName: "USD Coin",
+        usdcVersion: "2",
+        domain: 15,
+        tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+        messageTransmitter: "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
+        rpcUrl: monad.rpcUrls.default.http[0]
     }
 };
