@@ -9,9 +9,34 @@ async function main() {
 
   const ENTRYPOINT_ADDRESS = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
 
+  const SponsorPaymaster = await ethers.getContractFactory("SponsorPaymaster");
+
+  // Check Balance & Estimate
+  try {
+    const balance = await ethers.provider.getBalance(deployer.address);
+    console.log("Deployer balance:", ethers.formatEther(balance), "ETH");
+
+    const deploymentTx = await SponsorPaymaster.getDeployTransaction(ENTRYPOINT_ADDRESS);
+    const gasEstimate = await ethers.provider.estimateGas(deploymentTx);
+    const feeData = await ethers.provider.getFeeData();
+    const gasPrice = feeData.gasPrice ?? 1n;
+    const estimatedCost = gasEstimate * gasPrice;
+
+    console.log("\nEstimated Gas:", gasEstimate.toString());
+    console.log("Current Gas Price:", ethers.formatUnits(gasPrice, "gwei"), "gwei");
+    console.log("Estimated Cost:", ethers.formatEther(estimatedCost), "ETH");
+
+    if (balance < estimatedCost) {
+      console.error(`\n❌ INSUFFICIENT FUNDS! Needed: ${ethers.formatEther(estimatedCost)}, Available: ${ethers.formatEther(balance)}`);
+    } else {
+      console.log("✅ Funds sufficient for estimated cost.");
+    }
+  } catch (error) {
+    console.warn("Could not estimate gas (likely insufficient funds or RPC issue):", error);
+  }
+
   // Deploy SponsorPaymaster
   console.log("\nDeploying SponsorPaymaster...");
-  const SponsorPaymaster = await ethers.getContractFactory("SponsorPaymaster");
   // Constructor only takes entryPoint now
   const paymaster = await SponsorPaymaster.deploy(ENTRYPOINT_ADDRESS);
   await paymaster.waitForDeployment();

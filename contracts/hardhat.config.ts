@@ -12,7 +12,8 @@ import {
   avalanche,
   arbitrum,
   unichain,
-  monad
+  monad,
+  rootstock
 } from "viem/chains";
 
 import * as path from "path";
@@ -85,6 +86,11 @@ const config: HardhatUserConfig = {
       url: process.env.MONAD_RPC || monad.rpcUrls.default.http[0],
       chainId: monad.id,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+    },
+    rootstock: {
+      url: process.env.ROOTSTOCK_RPC || rootstock.rpcUrls.default.http[0],
+      chainId: rootstock.id,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     }
   },
   etherscan: {
@@ -99,6 +105,7 @@ const config: HardhatUserConfig = {
       arbitrumOne: process.env.ARBISCAN_API_KEY || "PLACEHOLDER",
       unichain: process.env.UNICHAIN_EXPLORER_API_KEY || "PLACEHOLDER",
       monad: process.env.MONAD_EXPLORER_API_KEY || "PLACEHOLDER",
+      rootstock: process.env.ROOTSTOCK_EXPLORER_API_KEY || "PLACEHOLDER",
     },
     customChains: [
       {

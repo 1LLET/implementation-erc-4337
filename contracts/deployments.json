@@ -43,5 +43,9 @@
     "SponsorPaymaster": "0x6c0de464F2203FE089FF719Acf425dFfE6ac1EE5",
     "SmartAccountFactory": "0x5D1D71FE2De5D1C52c7c11311332eC7f0CBf88aF",
     "EntryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+  },
+  "rootstock": {
+    "SponsorPaymaster": "0x0b2DEbd5E4Ccc354474e153532D5D54D2F013fCa",
+    "EntryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
   }
 }

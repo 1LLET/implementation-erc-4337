@@ -3,7 +3,7 @@ import { ethers } from "hardhat";
 
 async function main() {
     const ENTRY_POINT_ADDRESS = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
-    const PAYMASTER_ADDRESS = "0x6c0de464F2203FE089FF719Acf425dFfE6ac1EE5";
+    const PAYMASTER_ADDRESS = "0x20f20ABc242C3563CF5e792b93280AD3703F5F9F";
     const AMOUNT = "0.015";
 
     console.log(`Depositing ${AMOUNT} ETH to Paymaster ${PAYMASTER_ADDRESS} on EntryPoint ${ENTRY_POINT_ADDRESS}...`);
