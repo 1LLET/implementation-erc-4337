@@ -17,3 +17,5 @@ export { STELLAR } from "./chains/NoEvm/Stellar";
 export { TransferManager } from "./services/TransferManager";
 export { NearStrategy, getNearSimulation } from "./services/near";
 export { CCTPStrategy } from "./services/cctp";
+export { StargateStrategy, getStargateSimulation } from "./services/stargate";
+export { uniswapService, UniswapService } from "./services/uniswap";

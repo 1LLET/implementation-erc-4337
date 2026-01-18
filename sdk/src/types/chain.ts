@@ -40,9 +40,14 @@ export interface CircleInformation {
     aproxFromFee: number;
 }
 
+export interface StargateInformation {
+    support: boolean;
+}
+
 export interface CrossChainInformation {
     circleInformation?: CircleInformation;
     nearIntentInformation: NearIntentInformation | null;
+    stargateInformation?: StargateInformation;
 }
 
 export interface EvmInformation {
@@ -66,6 +71,7 @@ export interface Asset {
     decimals: number;
     address?: Address | string;
     coingeckoId?: string;
+    supportsStargate?: boolean;
 }
 
 export interface ChainConfig {

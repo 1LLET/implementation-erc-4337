@@ -8,7 +8,8 @@ export const AVALANCHE: ChainConfig = {
             name: "USDC",
             decimals: 6,
             address: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
-            coingeckoId: "usd-coin"
+            coingeckoId: "usd-coin",
+            supportsStargate: true
         },
         {
             name: "AVAX",
@@ -62,6 +63,9 @@ export const AVALANCHE: ChainConfig = {
                 }
             ],
             needMemo: false
+        },
+        stargateInformation: {
+            support: true,
         }
     }
 }

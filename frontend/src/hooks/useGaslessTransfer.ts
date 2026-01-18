@@ -370,6 +370,7 @@ export function useGaslessTransfer() {
         disconnect,
         deploy,
         approveInfinite,
-        transfer
+        transfer,
+        aa // Expose Account Abstraction instance for raw txs
     };
 }

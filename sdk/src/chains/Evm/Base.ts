@@ -8,7 +8,8 @@ export const BASE: ChainConfig = {
             name: "USDC",
             decimals: 6,
             address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-            coingeckoId: "usd-coin"
+            coingeckoId: "usd-coin",
+            supportsStargate: true
         },
         {
             name: "ETH",
@@ -51,6 +52,9 @@ export const BASE: ChainConfig = {
                 }
             ],
             needMemo: false
+        },
+        stargateInformation: {
+            support: true,
         }
     }
 }

@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { formatUnits } from "viem";
-import { CHAIN_CONFIGS, CHAIN_ID_TO_KEY, getNearSimulation } from "@1llet.xyz/erc4337-gasless-sdk";
+import { CHAIN_CONFIGS, CHAIN_ID_TO_KEY, getNearSimulation, getStargateSimulation, uniswapService } from "@1llet.xyz/erc4337-gasless-sdk";
+import { parseUnits, encodeFunctionData, erc20Abi, parseAbi } from "viem";
 import { useGaslessTransfer } from "@/hooks/useGaslessTransfer";
 import { LoginView } from "./gasless/LoginView";
 import { AccountInfo } from "./gasless/AccountInfo";
@@ -44,7 +45,8 @@ export default function MultiChainBridge() {
         deploy,
         isDeployed,
         approveInfinite,
-        transfer
+        transfer,
+        aa
     } = useGaslessTransfer();
 
     // Local Currency Hook: combine source and dest tokens
@@ -98,13 +100,26 @@ export default function MultiChainBridge() {
         setSimResult(null);
 
         try {
-            const result = await getNearSimulation(
-                sourceKey,
-                destKey,
-                amount,
-                destTokenSym,
-                selectedTokenSym
-            );
+            let result;
+
+            // Determine strategy
+            if (sourceKey === "Base" && destKey === "Avalanche") {
+                // Stargate: Base -> Avalanche
+                result = await getStargateSimulation(
+                    sourceKey,
+                    destKey,
+                    amount,
+                    recipient || "0x0000000000000000000000000000000000000000"
+                );
+            } else {
+                result = await getNearSimulation(
+                    sourceKey,
+                    destKey,
+                    amount,
+                    destTokenSym,
+                    selectedTokenSym
+                );
+            }
 
             if (result.success) {
                 setSimResult(result);
@@ -269,6 +284,143 @@ export default function MultiChainBridge() {
                         addLog("Warning: Deposit Required but missing details.");
                         setBridgeStatus("success");
                     }
+                } else if (result.transactionHash === "PENDING_USER_SIGNATURE") {
+                    // STARGATE STRATEGY (Contract Call Model)
+                    addLog("TransferManager: Stargate Strategy Selected.");
+                    addLog("Initiating Contract execution...");
+
+                    const txPayload = result.data;
+                    const { txTarget, txData, txValue, approvalRequired } = txPayload;
+
+                    // Parse the transfer amount from string to BigInt for calculations
+                    const parsedTransferAmount = parseUnits(amount, selectedToken?.decimals || 18);
+
+                    try {
+                        // Check Native Balance for Protocol Fee
+                        const requiredValue = BigInt(txValue || 0);
+                        let autoSwapTxs: any[] = [];
+                        let isAutoSwap = false;
+
+                        if (requiredValue > 0n) {
+                            const nativeBalance = await aa.getBalance("0x0000000000000000000000000000000000000000");
+                            if (nativeBalance < requiredValue) {
+                                // Auto-Swap Logic
+                                const missingETH = (requiredValue * 110n / 100n) - nativeBalance; // Add 10% dynamic buffer
+                                addLog(`Notice: Insufficient ETH for Fee. Initiating Auto-Swap for ${formatUnits(missingETH, 18)} ETH...`);
+
+                                isAutoSwap = true;
+
+                                // 1. Quote USDC needed
+                                addLog("Quoting Uniswap V3...");
+                                const usdcNeeded = await uniswapService.quoteUSDCForETH(missingETH);
+                                addLog(`Auto-Swap: Need ~${formatUnits(usdcNeeded, 6)} USDC`);
+
+                                // Safety Check & Pull Funds Logic
+                                const tokenBalance = await aa.getBalance(selectedToken?.address || "0x0");
+                                const totalRequiredUSDC = parsedTransferAmount + usdcNeeded;
+
+                                const amountToPull = totalRequiredUSDC > tokenBalance ? totalRequiredUSDC - tokenBalance : 0n;
+
+                                addLog(`Debug: Transfer=${formatUnits(parsedTransferAmount, 6)} | Fee=${formatUnits(usdcNeeded, 6)} | Total=${formatUnits(totalRequiredUSDC, 6)} | Pull=${formatUnits(amountToPull, 6)} | SA_Bal=${formatUnits(tokenBalance, 6)}`);
+
+                                if (amountToPull > 0n) {
+                                    // Check EOA Balance
+                                    const eoaBalance = await aa.getEoaBalance(selectedToken?.address || "0x0");
+                                    if (eoaBalance < amountToPull) {
+                                        const diff = formatUnits(amountToPull - eoaBalance, 6);
+                                        addLog(`Error: Insufficient EOA Balance. Need ${diff} more.`);
+                                        throw new Error(`Insufficient funds in your Wallet. You need additional ~${diff} USDC.`);
+                                    }
+
+                                    // Add Pull Tx to Batch (Prepend)
+                                    const pullTx = {
+                                        target: selectedToken?.address as `0x${string}`,
+                                        data: encodeFunctionData({
+                                            abi: erc20Abi,
+                                            functionName: "transferFrom",
+                                            args: [owner as `0x${string}`, smartAccount as `0x${string}`, amountToPull]
+                                        }),
+                                        value: 0n
+                                    };
+                                    autoSwapTxs.push(pullTx);
+                                    addLog("Preparing to pull funds from Wallet to Smart Account...");
+                                }
+
+
+                                // 2. Build Swap TX
+                                const swapData = uniswapService.buildSwapData(
+                                    smartAccount as `0x${string}`,
+                                    missingETH,
+                                    usdcNeeded
+                                );
+
+                                // 3. Build Approve TX for SwapRouter
+                                const approveSwapData = encodeFunctionData({
+                                    abi: erc20Abi,
+                                    functionName: "approve",
+                                    args: [uniswapService.getRouterAddress(), usdcNeeded]
+                                });
+
+                                autoSwapTxs.push({
+                                    target: selectedToken?.address,
+                                    data: approveSwapData,
+                                    value: 0n
+                                });
+
+                                autoSwapTxs.push({
+                                    target: uniswapService.getRouterAddress(),
+                                    data: swapData,
+                                    value: 0n
+                                });
+                            }
+                        }
+
+                        // Prepare Bridge Transactions
+                        const bridgeTxs = [];
+
+                        // 1. Approve for Stargate (if needed)
+                        if (approvalRequired) {
+                            addLog("Approving Token for Stargate...");
+                            bridgeTxs.push({
+                                target: approvalRequired.target,
+                                data: approvalRequired.data,
+                                value: BigInt(approvalRequired.value || 0)
+                            });
+                        }
+
+                        // 2. Main Bridge Transaction
+                        bridgeTxs.push({
+                            target: txTarget,
+                            data: txData,
+                            value: BigInt(txValue || 0)
+                        });
+
+                        // Execution
+                        const finalBatch = [...autoSwapTxs, ...bridgeTxs];
+
+                        if (isAutoSwap) {
+                            addLog("Executing Batch: [Swap Fee + Bridge]...");
+                        } else {
+                            addLog("Executing Bridge Transaction...");
+                        }
+
+                        const execReceipt = await aa.sendBatchTransaction(finalBatch);
+
+                        if (execReceipt.success) {
+                            addLog("Transfer Successful!");
+                            addLog(`Tx Hash: ${execReceipt.receipt.transactionHash}`);
+                            setBridgeStatus("success");
+                        } else {
+                            addLog("Transfer Failed on-chain (UserOp Reverted).");
+                            setBridgeStatus("error");
+                        }
+
+                    } catch (err: any) {
+                        console.error(err);
+                        addLog(`Execution Error: ${err.message}`);
+                        setBridgeStatus("error");
+                    }
+
                 } else {
                     addLog("Bridge Successful!");
                     addLog(`Tx Hash: ${result.transactionHash}`);
